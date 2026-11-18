@@ -102,7 +102,7 @@
     this.timer = null;
     this.ttimer = null;
     this.schedKey = null;
-    this.timerSec = 0;          // turn timer: 0 = off, else 15/30/45/60
+    this.timerSec = 0;          // turn timer: 0 = off, else 30/45/60/120
     this.timerScale = 1;        // tests shrink this
     this.turnEnd = null;
     this.chat = [];
@@ -179,7 +179,7 @@
       case 'timer': {
         if (!isHost) return { err: 'Only the host can do that' };
         var ts = parseInt(a.sec, 10);
-        if ([0, 15, 30, 45, 60].indexOf(ts) < 0) return { err: 'Bad timer' };
+        if ([0, 30, 45, 60, 120].indexOf(ts) < 0) return { err: 'Bad timer' };
         this.timerSec = ts;
         this.emit();
         return { ok: true };

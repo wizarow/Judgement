@@ -45,24 +45,23 @@ input:focus{border-color:var(--ac)}
 .card .ix{position:absolute;top:4px;left:5px;line-height:1.02;font-weight:700;text-align:center;letter-spacing:-.02em}
 .card .ix.br{top:auto;left:auto;bottom:4px;right:5px;transform:rotate(180deg)}
 /* home */
-.hero{flex:1;display:flex;flex-direction:column;justify-content:space-evenly;padding:.4rem 0}
-.fan{position:relative;height:215px;width:320px;margin:0 auto .5rem}
+.hero{flex:0 0 auto;display:flex;flex-direction:column;justify-content:flex-start;padding:.4rem 0;margin-top:clamp(.4rem,3.5vh,2.4rem)}
+.fan{position:relative;margin:0 auto}
 .fan .pc{position:absolute;left:112px;bottom:0;transform-origin:50% 150%;animation:deal .7s both}
 @keyframes deal{from{opacity:0;transform:translate(0,-60px) rotate(0) scale(.6)}to{opacity:1}}
-.title{font-family:var(--serif);font-size:3.7rem;font-weight:500;line-height:1;color:var(--ac);text-align:center;margin:.1rem 0 0}
-.words{display:flex;justify-content:center;gap:.5rem;flex-wrap:wrap;margin:.9rem 0 .8rem}
-.w{font-family:var(--serif);font-style:italic;font-size:1.05rem;padding:.2rem .85rem;border-radius:20px;background:var(--pill);animation:pop .6s both}
-.w1{animation-delay:.9s}.w2{animation-delay:1.1s}.w3{animation-delay:1.3s;background:var(--ac);color:var(--btx);font-style:normal;font-weight:700;font-size:1.1rem}
+.title{font-family:var(--serif);font-size:min(4.6rem,18.5vw);font-weight:500;line-height:1;color:var(--ac);text-align:center;margin:.1rem 0 0}
+.words{display:flex;justify-content:center;gap:.5rem;flex-wrap:wrap;margin:.7rem 0 .9rem}
+.w{font-family:var(--serif);font-style:italic;font-size:1.35rem;padding:.25rem 1rem;border-radius:20px;background:var(--pill);animation:pop .6s both}
+.w1{animation-delay:.9s}.w2{animation-delay:1.1s}.w3{animation-delay:1.3s;background:var(--ac);color:var(--btx);font-style:normal;font-weight:700;font-size:1.4rem}
 @keyframes pop{0%{opacity:0;transform:translateY(14px) scale(.7)}70%{transform:translateY(-3px) scale(1.08)}100%{opacity:1;transform:none}}
-.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem}
-.tile{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:.6rem .65rem}
-.tile .t1{font-family:var(--serif);font-size:1.05rem;color:var(--ac)}
-.tile .t2{font-size:.72rem;color:var(--mut);margin-top:.15rem;line-height:1.3}
-.home{margin-top:auto;padding-top:.8rem}
+.home{margin-top:auto;padding-top:.8rem;padding-bottom:clamp(1rem,6vh,4.2rem)}
+.home input{font-size:1.2rem;padding:.9rem 1rem}
+.home .row2 button{font-size:1.2rem;padding:.7rem 1.3rem;white-space:nowrap}
+@media (max-height:720px){.home input{padding:.65rem .9rem}.big{padding:.75rem}.or{margin:.55rem 0 .4rem}.home .row2 button{padding:.5rem 1.1rem}.err{min-height:.8rem;margin:.1rem 0}.words{margin:.5rem 0 .6rem}.home{padding-bottom:.8rem}}
 .err{min-height:1.1rem;font-size:.82rem;color:var(--hot);margin:.2rem 0 .3rem}
 .row2{display:flex;gap:.5rem}
-.or{text-align:center;font-size:.68rem;color:var(--mut);letter-spacing:.12em;margin:.9rem 0 .5rem}
-.big{width:100%;font-size:1.05rem;padding:.85rem}
+.or{text-align:center;font-size:.82rem;color:var(--mut);letter-spacing:.12em;margin:.9rem 0 .5rem}
+.big{width:100%;font-size:1.4rem;padding:1rem}
 /* lobby */
 .lab{font-size:.68rem;letter-spacing:.14em;color:var(--mut);text-transform:uppercase}
 .seatrow{display:flex;align-items:center;gap:.6rem;background:var(--pill);border-radius:12px;padding:.6rem .7rem;margin-bottom:.4rem}
@@ -208,7 +207,8 @@ var VER='v1 · Ishan Atul’s render';
 var THEMES=[['mid','Midnight'],['ivo','Ivory'],['felt','Felt'],['ruby','Ruby']];
 var SIZES=['Normal','Large','Larger','Huge'];
 var FS=[16,18,20,23];
-var TIMERS=[0,15,30,45,60];
+var TIMERS=[0,30,45,60,120];
+function timerLabel(t){return !t?'Off':t<60?t+' s':(t/60)+' min'}
 var SY={S:'♠',H:'♥',C:'♣',D:'♦'};
 var SN=E.SUIT_NAME;
 var RL={11:'J',12:'Q',13:'K',14:'A'};
@@ -336,13 +336,14 @@ function cardHTML(c,o){
     +ix.replace('%B','')+'<span>'+SY[s]+'</span>'+ix.replace('%B',' br')+'</div>';
 }
 function backFan(){
-  var cs=[['A','S'],['K','H'],['Q','D'],['J','C'],['10','S']],h='',w=92,hh=130;
+  var k=innerHeight>=830?1:innerHeight>=760?.9:innerHeight>=690?.76:innerHeight>=620?.56:.48;
+  var cs=[['A','S'],['K','H'],['Q','D'],['J','C'],['10','S']],h='',w=Math.round(104*k),hh=Math.round(146*k),fs=Math.round(54*k),ixs=Math.round(20*k),W=Math.round(340*k),L=Math.round(118*k);
   cs.forEach(function(c,i){
-    var s=c[1],ix='<span class="ix%B" style="font-size:18px">'+c[0]+'<br>'+SY[s]+'</span>';
-    h+='<div class="card pc '+(isRed(s)?'red':'')+'" style="width:'+w+'px;height:'+hh+'px;font-size:48px;left:114px;transform:rotate('+((i-2)*17)+'deg);animation-delay:'+(i*.12)+'s">'
+    var s=c[1],ix='<span class="ix%B" style="font-size:'+ixs+'px">'+c[0]+'<br>'+SY[s]+'</span>';
+    h+='<div class="card pc '+(isRed(s)?'red':'')+'" style="width:'+w+'px;height:'+hh+'px;font-size:'+fs+'px;left:'+L+'px;transform:rotate('+((i-2)*17)+'deg);animation-delay:'+(i*.12)+'s">'
       +ix.replace('%B','')+'<span>'+SY[s]+'</span>'+ix.replace('%B',' br')+'</div>';
   });
-  return '<div class="fan">'+h+'</div>';
+  return '<div class="fan" style="width:'+W+'px;height:'+Math.round(172*k)+'px;margin-bottom:'+Math.round(52*k)+'px">'+h+'</div>';
 }
 function pill(){
   var mp=snap&&player(snap.me);
@@ -353,7 +354,7 @@ function topbar(){
 }
 function timerChips(isHost,cur){
   var h='<div class="chips">';
-  TIMERS.forEach(function(t){h+='<button class="chip '+(cur===t?'on':'')+'" '+(isHost?'data-a="timer" data-s="'+t+'"':'disabled')+'>'+(t?t+'s':'Off')+'</button>'});
+  TIMERS.forEach(function(t){h+='<button class="chip '+(cur===t?'on':'')+'" '+(isHost?'data-a="timer" data-s="'+t+'"':'disabled')+'>'+timerLabel(t)+'</button>'});
   return h+'</div>';
 }
 
@@ -364,13 +365,13 @@ function renderHome(){
    +'<div class="top"><button class="ib" data-a="rules">Rules</button><button class="pillb" data-a="settings"><span class="gear" style="margin:0">⚙︎</span> Settings</button></div>'
    +'<div class="hero">'+backFan()+'<div class="title">Judgement</div>'
    +'<div class="words"><span class="w w1">Call it.</span><span class="w w2">Make it.</span><span class="w w3">Win it.</span></div>'
-   +'<div class="tiles"><div class="tile"><div class="t1">1 · Call</div><div class="t2">say how many hands</div></div><div class="tile"><div class="t1">2 · Play</div><div class="t2">follow the suit</div></div><div class="tile"><div class="t1">3 · Score</div><div class="t2">10 + your call</div></div></div></div>'
+   +'</div>'
    +'<div class="home"><input id="nm" maxlength="16" placeholder="Your name (required)" value="'+esc(savedName)+'" autocomplete="off">'
    +'<div class="err">'+esc(errMsg)+'</div>'
    +'<button class="pri big" data-a="create">Start a room</button>';
   h+='<div class="or">OR JOIN A FRIEND</div>'
-   +'<div class="row2"><input id="rc" maxlength="4" placeholder="Room code" value="'+esc(q.toUpperCase())+'" style="text-transform:uppercase;letter-spacing:.3em;font-family:ui-monospace,Menlo,monospace"><button data-a="join" style="white-space:nowrap;padding:.6rem 1.1rem">Join room</button></div>';
-  if(DEMO)h+='<div class="note" style="margin-top:.7rem;line-height:1.5">Demo: Start a room and two friends join automatically. Joining by code works in the live app.</div>';
+   +'<div class="row2"><input id="rc" maxlength="4" placeholder="Room code" value="'+esc(q.toUpperCase())+'" style="text-transform:uppercase;letter-spacing:.3em;font-family:ui-monospace,Menlo,monospace"><button data-a="join">Join room</button></div>';
+  if(DEMO)h+='<div class="note" style="margin-top:.7rem;line-height:1.5">Demo: friends join automatically. Codes work in the live app.</div>';
   h+='</div>';
   $('#app').innerHTML=h;
   errMsg='';

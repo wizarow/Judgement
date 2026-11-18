@@ -33,7 +33,7 @@ Don't redeploy mid-game: live rooms are held in memory and drop on restart. The 
 
 ## Screens
 - Home: name (required), Start a room, or Join room with a 4-letter code. Rules top-left, settings top-right.
-- Lobby: host adds/removes bots and players, sets the turn timer (Off, 15, 30, 45, 60 s).
+- Lobby: host adds/removes bots and players, sets the turn timer (Off, 30 s, 45 s, 1 min, 2 min).
 - Game: lead-suit banner ("Follow ♣ Clubs"), LEADS / CUT tags on table cards, tap a card to select it, press Play.
   After the last hand of a round the table is held for 4 seconds, then the Screen opens.
 - Screen: rounds down the side, players across, each with Call and Made. Made calls highlighted, missed calls struck off,

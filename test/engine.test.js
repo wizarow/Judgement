@@ -96,6 +96,8 @@ function play(nHumans, size) {
   assert(c.act(2, { type: 'chat', text: 'hi' }).ok);
   assert(c.act(2, { type: 'timer', sec: 30 }).err, 'only host sets timer');
   assert(c.act(1, { type: 'timer', sec: 20 }).err, 'timer values validated');
+  assert(c.act(1, { type: 'timer', sec: 15 }).err, '15s no longer offered');
+  assert(c.act(1, { type: 'timer', sec: 120 }).ok, '2 min allowed');
   assert(c.act(1, { type: 'timer', sec: 45 }).ok);
   assert.strictEqual(c.snapshot(2).timerSec, 45);
   assert.strictEqual(c.snapshot(2).chat.length, 2);
@@ -106,7 +108,7 @@ function play(nHumans, size) {
     const t = new Game('T', { fast: false });
     t.autoMs = 99999;
     t.addHuman('Solo', 'a'); t.size = 3;
-    t.act(1, { type: 'timer', sec: 15 });
+    assert(t.act(1, { type: 'timer', sec: 30 }).ok);
     let done = false;
     t.onChange = () => {
       try {
@@ -114,8 +116,8 @@ function play(nHumans, size) {
         if (t.players[t.turnIdx].bot) return;
         done = true;
         const end = t.turnEnd;
-        assert(end && end > Date.now() + 14000, 'human turn is timed (15s)');
-        assert(t.snapshot(1).turnLeft > 14000);
+        assert(end && end > Date.now() + 29000, 'human turn is timed (30s)');
+        assert(t.snapshot(1).turnLeft > 29000);
         setTimeout(() => {
           t.act(1, { type: 'chat', text: 'hello' });
           assert.strictEqual(t.turnEnd, end, 'chat did not reset the timer');
