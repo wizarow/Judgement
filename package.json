@@ -1,0 +1,14 @@
+{
+  "name": "judgement",
+  "version": "1.0.0",
+  "description": "Judgement - the card game, online. Call it. Make it. Win it.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/engine.test.js",
+    "build": "node build.js"
+  },
+  "engines": { "node": ">=18" },
+  "license": "UNLICENSED",
+  "private": true
+}
