@@ -41,6 +41,62 @@
     return best.pid;
   }
 
+  // ---- Bot brains: easy / medium (the original bot) / hard ----
+  var P_NON = [0.8, 0.42, 0.2, 0.08, 0.02];
+  var P_CUT = [0.95, 0.85, 0.7, 0.55, 0.4, 0.4, 0.28, 0.28, 0.28, 0.18];
+  var A_OWN = 0.5;   // how much of my own higher cards count as cover for the card below
+  function interp(tab, u) {
+    if (u <= 0) return tab[0];
+    var i = Math.floor(u), f = u - i;
+    var a = tab[Math.min(i, tab.length - 1)], b = tab[Math.min(i + 1, tab.length - 1)];
+    return a + (b - a) * f;
+  }
+  function seenSet(hand, played) {
+    var s = {};
+    hand.forEach(function (c) { s[c] = 1; });
+    (played || []).forEach(function (c) { s[c] = 1; });
+    return s;
+  }
+  // higher cards of the same suit: unseen ones (could be anywhere) and ones I hold myself
+  function higherInfo(card, hand, seen) {
+    var s = suitOf(card), r = rankOf(card), u = 0, own = 0;
+    for (var x = r + 1; x <= 14; x++) {
+      var c = s + x;
+      if (hand.indexOf(c) >= 0) own++; else if (!seen[c]) u++;
+    }
+    return { u: u, own: own };
+  }
+  function winProb(card, hand, seen, cut) {
+    var h = higherInfo(card, hand, seen);
+    return interp(suitOf(card) === cut ? P_CUT : P_NON, h.u + A_OWN * h.own);
+  }
+  function fixLast(c, target, cards, sum, isLast) {
+    c = Math.max(0, Math.min(cards, c));
+    if (isLast && sum + c === cards) {
+      var alts = [c - 1, c + 1].filter(function (x) { return x >= 0 && x <= cards; });
+      alts.sort(function (a, b) { return Math.abs(a - target) - Math.abs(b - target); });
+      c = alts[0];
+    }
+    return c;
+  }
+
+  // Hard-bot call estimate: least-squares fit of tricks made on hand features, from bot-vs-bot rounds.
+  // Keys: players -> [no cut, cut]. Order matches Bot.features.
+  var HARD_COEF = {
+    3: [[0.923, 0.81, 0.736, 0.606, 0.205, -0.144, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        [0.75, 0.679, 0.515, 0.379, 0.113, -0.145, 1.203, 1.038, 0.91, 0.804, 0.764, 0.718, 0.65, 0.62, -0.14, 0.014, -0.064]],
+    4: [[0.908, 0.729, 0.554, 0.388, 0.112, -0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        [0.679, 0.462, 0.305, 0.198, 0.028, -0.075, 1.043, 0.811, 0.676, 0.577, 0.508, 0.436, 0.36, 0.293, 0.119, 0.082, 0.011]],
+    5: [[0.902, 0.581, 0.375, 0.288, 0.081, -0.086, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        [0.597, 0.328, 0.174, 0.097, -0.01, -0.029, 0.952, 0.644, 0.513, 0.392, 0.319, 0.25, 0.176, 0.095, 0.306, 0.115, 0.046]],
+    6: [[0.853, 0.469, 0.347, 0.242, 0.048, -0.074, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        [0.483, 0.23, 0.114, 0.047, -0.013, -0.021, 0.949, 0.589, 0.441, 0.333, 0.244, 0.168, 0.105, 0.022, 0.377, 0.105, 0.036]],
+    7: [[0.733, 0.401, 0.286, 0.199, 0.052, -0.098, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        [0.401, 0.169, 0.08, 0.029, -0.013, -0.02, 0.912, 0.517, 0.362, 0.272, 0.182, 0.101, 0.03, -0.032, 0.428, 0.109, 0.037]],
+    8: [[0.599, 0.286, 0.247, 0.19, 0.041, -0.063, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        [0.312, 0.133, 0.058, 0.017, -0.01, -0.019, 0.876, 0.489, 0.321, 0.222, 0.133, 0.066, -0.012, -0.077, 0.46, 0.106, 0.033]],
+  };
+
   var Bot = {
     estimate: function (hand, cut, n) {
       var e = 0;
@@ -52,18 +108,60 @@
       });
       return e * Math.max(0.55, 1 - (n - 4) * 0.06);
     },
-    call: function (hand, cut, n, cards, sumSoFar, isLast) {
-      var est = this.estimate(hand, cut, n);
-      var c = Math.round(est + (Math.random() < 0.25 ? (Math.random() < 0.5 ? -1 : 1) : 0));
-      c = Math.max(0, Math.min(cards, c));
-      if (isLast && sumSoFar + c === cards) {
-        var alts = [c - 1, c + 1].filter(function (x) { return x >= 0 && x <= cards; });
-        alts.sort(function (a, b) { return Math.abs(a - est) - Math.abs(b - est); });
-        c = alts[0];
+    // Hand features the Hard estimate is fitted on (counts of cards by how many higher cards are still out)
+    features: function (hand, cut) {
+      var f = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seen = seenSet(hand, []);
+      var cutBk = [0, 1, 2, 3, 4, 5, 5, 6, 6, 7];   // u -> bucket for cut cards (u>=9 -> 7)
+      hand.forEach(function (c) {
+        var h = higherInfo(c, hand, seen);
+        if (suitOf(c) === cut) {
+          f[5 + 1 + (h.u >= 9 ? 7 : cutBk[h.u])] += 1;
+          if (h.u > 0 && h.own > 0) f[14] += 1;
+        } else {
+          f[Math.min(h.u, 4)] += 1;
+          if (h.u > 0 && h.own > 0) f[5] += 1;
+        }
+      });
+      if (cut) {
+        var nCut = hand.filter(function (c) { return suitOf(c) === cut; }).length;
+        SUITS.forEach(function (st) {
+          if (st === cut) return;
+          var k = hand.filter(function (c) { return suitOf(c) === st; }).length;
+          if (k === 0 && nCut) f[15] += 1;
+          if (k === 1 && nCut) f[16] += 1;
+        });
       }
-      return c;
+      return f;
     },
-    play: function (hand, led, trick, cut, need) {
+    // Hard: counts what I hold against what is still out there.
+    estimateHard: function (hand, cut, n) {
+      var w = HARD_COEF[n] && HARD_COEF[n][cut ? 1 : 0];
+      if (!w) return this.estimate(hand, cut, n);
+      var f = this.features(hand, cut), e = 0;
+      for (var i = 0; i < f.length; i++) e += f[i] * w[i];
+      return Math.max(0, Math.min(hand.length, e));
+    },
+    call: function (hand, cut, n, cards, sum, isLast, level, ctx) {
+      ctx = ctx || {};
+      var est, c;
+      if (level === 'hard' || level === 'hc') {
+        est = this.estimateHard(hand, cut, n);
+        return fixLast(Math.round(est), est, cards, sum, isLast);
+      }
+      est = this.estimate(hand, cut, n);
+      if (level === 'easy') c = Math.round(est + (Math.random() - 0.5) * 3.4);
+      else c = Math.round(est + (Math.random() < 0.25 ? (Math.random() < 0.5 ? -1 : 1) : 0));
+      return fixLast(c, est, cards, sum, isLast);
+    },
+    play: function (hand, led, trick, cut, need, level, ctx) {
+      if (level === 'hard' || level === 'hp') return this.playHard(hand, led, trick, cut, need, ctx || {});
+      if (level === 'easy' && Math.random() < 0.5) {
+        var lg = legalCards(hand, led);
+        return lg[rnd(lg.length)];
+      }
+      return this.playMedium(hand, led, trick, cut, need);
+    },
+    playMedium: function (hand, led, trick, cut, need) {
       var legal = legalCards(hand, led);
       var val = function (c) { return rankOf(c) + (suitOf(c) === cut ? 20 : 0); };
       var asc = function (a, b) { return val(a) - val(b); };
@@ -76,6 +174,17 @@
       var w = legal.filter(wins), l = legal.filter(function (c) { return !wins(c); });
       if (need > 0) return w.length ? w.sort(asc)[0] : legal.slice().sort(asc)[0];
       return l.length ? l.sort(desc)[0] : legal.slice().sort(asc)[0];
+    },
+    // Hard plays like Medium, except it leads smarter when it does not want another hand:
+    // it leads the card least likely to win, counting what has already been played.
+    playHard: function (hand, led, trick, cut, need, ctx) {
+      var legal = legalCards(hand, led);
+      if (legal.length === 1) return legal[0];
+      if (led || need > 0) return this.playMedium(hand, led, trick, cut, need);
+      var seen = seenSet(hand, ctx.played);
+      var val = function (c) { return rankOf(c) + (suitOf(c) === cut ? 20 : 0); };
+      var prob = function (c) { return winProb(c, hand, seen, cut); };
+      return legal.slice().sort(function (a, b) { return prob(a) - prob(b) || val(a) - val(b); })[0];
     }
   };
 
@@ -103,6 +212,9 @@
     this.ttimer = null;
     this.schedKey = null;
     this.timerSec = 0;          // turn timer: 0 = off, else 30/45/60/120
+    this.botLevel = 'medium';   // easy | medium | hard
+    this.seq = 0;               // bumps on every change so clients can order updates
+    this.played = [];
     this.timerScale = 1;        // tests shrink this
     this.turnEnd = null;
     this.chat = [];
@@ -147,6 +259,7 @@
 
   Game.prototype.emit = function () {
     this.touched = Date.now();
+    this.seq++;
     this.schedule();
     this.onChange();
   };
@@ -181,6 +294,13 @@
         var ts = parseInt(a.sec, 10);
         if ([0, 30, 45, 60, 120].indexOf(ts) < 0) return { err: 'Bad timer' };
         this.timerSec = ts;
+        this.emit();
+        return { ok: true };
+      }
+      case 'level': {
+        if (!isHost) return { err: 'Only the host can do that' };
+        if (['easy', 'medium', 'hard'].indexOf(a.level) < 0) return { err: 'Bad level' };
+        this.botLevel = a.level;
         this.emit();
         return { ok: true };
       }
@@ -224,7 +344,7 @@
         this.players = this.players.filter(function (x) { return !x.bot; });
         this.players.forEach(function (x) { x.score = 0; x.call = null; x.made = 0; x.hand = []; });
         this.history = []; this.round = null; this.winners = []; this.trick = []; this.led = null;
-        this.schedKey = null; this.turnEnd = null;
+        this.schedKey = null; this.turnEnd = null; this.played = [];
         this.phase = 'lobby';
         this.emit();
         return { ok: true };
@@ -284,6 +404,7 @@
     this.phase = 'calling';
     this.turnIdx = first;
     this.trick = []; this.led = null; this.trickWinner = null;
+    this.played = [];
     this.emit();
   };
 
@@ -320,6 +441,7 @@
     p.hand = p.hand.filter(function (c) { return c !== card; });
     if (!this.trick.length) this.led = suitOf(card);
     this.trick.push({ pid: p.id, card: card });
+    this.played.push(card);
     if (this.trick.length < this.n) {
       this.turnIdx = (this.turnIdx + 1) % this.n;
       this.emit();
@@ -399,12 +521,15 @@
   Game.prototype.botAct = function (pid) {
     var cur = this.players[this.turnIdx];
     if (!cur || cur.id !== pid) return;
+    // a human whose time ran out (or who is away) is played for at Medium, whatever the bot level is
+    var level = cur.bot ? (cur.level || this.botLevel) : 'medium';
     if (this.phase === 'calling') {
       var cs = this.callState();
-      var n = Bot.call(cur.hand, this.round.cut, this.n, this.round.cards, cs.sum, cs.isLast);
+      var k = this.players.filter(function (p) { return p.call !== null; }).length;
+      var n = Bot.call(cur.hand, this.round.cut, this.n, this.round.cards, cs.sum, cs.isLast, level, { k: k });
       this.doCall(cur, n);
     } else if (this.phase === 'playing') {
-      var c = Bot.play(cur.hand, this.led, this.trick, this.round.cut, cur.call - cur.made);
+      var c = Bot.play(cur.hand, this.led, this.trick, this.round.cut, cur.call - cur.made, level, { n: this.n, played: this.played });
       this.doPlay(cur, c);
     }
   };
@@ -431,7 +556,7 @@
       history: this.history, round: this.round, turn: turn, led: this.led,
       trick: this.trick, trickWinner: this.trickWinner, winners: this.winners,
       hand: me && inGame ? me.hand : [], legal: [], callInfo: null,
-      timerSec: this.timerSec,
+      timerSec: this.timerSec, botLevel: this.botLevel, seq: this.seq,
       turnLeft: this.turnEnd && (this.phase === 'calling' || this.phase === 'playing') ? Math.max(0, this.turnEnd - Date.now()) : null,
       chat: this.chat.slice(-50)
     };

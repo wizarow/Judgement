@@ -79,6 +79,17 @@ const server = http.createServer(async (req, res) => {
   try {
     if (req.method === 'GET' && url.pathname === '/health') return send(res, 200, { ok: true, rooms: rooms.size });
 
+    if (req.method === 'GET' && url.pathname === '/api/ping') return send(res, 200, { t: Date.now() });
+
+    // Current state on demand: used to resync after a stalled stream, and as the polling fallback.
+    if (req.method === 'GET' && url.pathname === '/api/state') {
+      const code = (url.searchParams.get('code') || '').toUpperCase();
+      const g = rooms.get(code);
+      const p = g && g.byToken(url.searchParams.get('token'));
+      if (!g || !p) return send(res, 404, { err: 'Room not found' });
+      return send(res, 200, { s: g.snapshot(p.id) });
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/stream') {
       const code = (url.searchParams.get('code') || '').toUpperCase();
       const g = rooms.get(code);
@@ -88,6 +99,7 @@ const server = http.createServer(async (req, res) => {
         'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform',
         'Connection': 'keep-alive', 'X-Accel-Buffering': 'no'
       });
+      if (req.socket) { req.socket.setNoDelay(true); req.socket.setKeepAlive(true, 15000); }
       res.write('retry: 2000\n\n');
       const m = streams.get(code);
       if (!m.has(p.id)) m.set(p.id, new Set());
@@ -131,7 +143,10 @@ const server = http.createServer(async (req, res) => {
         const g = rooms.get(code);
         const p = g && g.byToken(b.token);
         if (!p) return send(res, 404, { err: 'Room not found' });
-        return send(res, 200, g.act(p.id, b.a));
+        const r = g.act(p.id, b.a);
+        // the reply carries the sender's fresh state so their screen updates without waiting for the stream
+        if (r && r.ok && g.byId(p.id)) r.s = g.snapshot(p.id);
+        return send(res, 200, r);
       }
     }
     if (req.method === 'GET') return serveStatic(req, res, url);
@@ -142,9 +157,16 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+// Heartbeat every 10 s: keeps proxies from closing idle streams, and carries the room's change counter
+// so a client that missed an update notices and resyncs.
 setInterval(() => {
-  streams.forEach(m => m.forEach(set => set.forEach(res => { try { res.write(': ping\n\n'); } catch (e) {} })));
-}, 20000);
+  streams.forEach((m, code) => {
+    const g = rooms.get(code);
+    if (!g) return;
+    const data = 'event: hb\ndata: {"seq":' + g.seq + '}\n\n';
+    m.forEach(set => set.forEach(res => { try { res.write(data); } catch (e) {} }));
+  });
+}, 10000);
 
 setInterval(() => {
   const now = Date.now();

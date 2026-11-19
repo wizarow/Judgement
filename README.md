@@ -33,8 +33,9 @@ Don't redeploy mid-game: live rooms are held in memory and drop on restart. The 
 
 ## Screens
 - Home: name (required), Start a room, or Join room with a 4-letter code. Rules top-left, settings top-right.
-- Lobby: host adds/removes bots and players, sets the turn timer (Off, 30 s, 45 s, 1 min, 2 min).
-- Game: lead-suit banner ("Follow ♣ Clubs"), LEADS / CUT tags on table cards, tap a card to select it, press Play.
+- Lobby: big room code (tap to copy the invite link), host adds/removes bots and players, sets the turn timer (Off, 30 s, 45 s, 1 min, 2 min).
+- Game: small numbers on the players strip show this round's calling order (1 calls first, the last number calls last).
+  Lead-suit banner ("Follow ♣ Clubs"), LEADS / CUT tags on table cards, tap a card to select it, press Play.
   After the last hand of a round the table is held for 4 seconds, then the Screen opens.
 - Screen: rounds down the side, players across, each with Call and Made. Made calls highlighted, missed calls struck off,
   Total pinned at the bottom. Open any time with the Screen button.
@@ -42,12 +43,19 @@ Don't redeploy mid-game: live rooms are held in memory and drop on restart. The 
   (never over the table or your cards). Everyone sees everything; no private messages.
 
 ## Settings (gear on the name pill)
-Name, turn timer (host), text size (Normal, Large, Larger, Huge), theme (Midnight, Ivory, Felt, Ruby),
+Name, turn timer (host), bot difficulty (host: Easy, Medium, Hard; default Medium), connection status, text size (Normal, Large, Larger, Huge), theme (Midnight, Ivory, Felt, Ruby),
 white or black cards, host: remove a player (a bot takes the seat mid-game). Saved per phone.
 Theme no longer rotates between rounds.
 
 ## Notes
 - Name is required to create or join. Rejoin after a refresh is automatic on the same device.
 - Turn timer: when it runs out a bot plays that turn and a note appears in the chat. Default is Off.
-- A disconnected human who is up to play is auto-played by a bot after 25 seconds.
+- A disconnected human who is up to play is auto-played after 25 seconds. A human whose turn timer runs out is also auto-played, always at Medium.
+- Bot levels: Easy calls loosely and plays half its cards at random. Medium is the original bot. Hard calls from a fitted
+  estimate (cut-suit strength, cards still out) and leads smarter when it does not want another hand. Over simulated
+  games (`node test/botsim.js 2000 easy,medium,hard,medium`) Hard averages roughly 15-20% above Medium, Medium roughly 30% above Easy.
+- Connection: the server streams updates (SSE) with a heartbeat every 10 s. A phone that stops hearing from it for 25 s
+  reconnects on its own, resyncs when it wakes or the network returns, and falls back to polling `/api/state` if the stream keeps failing.
+  Your own moves update your screen from the action reply, without waiting for the stream. A small dot next to the version line shows the state;
+  Settings shows the round-trip time. `/health` is there for an uptime pinger (Render free instances sleep after 15 idle minutes).
 - Set JD_FAST=1 to run bots instantly (testing only).

@@ -170,6 +170,45 @@ function play(nHumans, size) {
     h.destroy();
   }
 
+  // bot difficulty: default, host-only setting, validation, snapshot, seq
+  {
+    const d = new Game('L', { fast: true });
+    d.addHuman('Host', 'a'); d.addHuman('Guest', 'b');
+    assert.strictEqual(d.snapshot(1).botLevel, 'medium', 'default level is Medium');
+    assert(d.act(2, { type: 'level', level: 'hard' }).err, 'only host sets level');
+    assert(d.act(1, { type: 'level', level: 'pro' }).err, 'levels validated');
+    const s0 = d.snapshot(1).seq;
+    assert(d.act(1, { type: 'level', level: 'hard' }).ok);
+    assert.strictEqual(d.snapshot(2).botLevel, 'hard');
+    assert(d.snapshot(1).seq > s0, 'seq advances on every change');
+    d.destroy();
+  }
+  // a timed-out human is auto-played at Medium even when bots are Hard
+  await new Promise((resolve, reject) => {
+    const t = new Game('M', { fast: true });
+    t.addHuman('Solo', 'a'); t.size = 3; t.botLevel = 'hard';
+    t.timerSec = 30; t.timerScale = 0.002;
+    const realCall = E.Bot.call, seen = [];
+    E.Bot.call = function () { seen.push({ lvl: arguments[6], pid: t.players[t.turnIdx] && t.players[t.turnIdx].bot }); return realCall.apply(this, arguments); };
+    t.act(1, { type: 'start' });
+    setTimeout(() => {
+      E.Bot.call = realCall;
+      try {
+        assert(seen.some(x => x.pid === false && x.lvl === 'medium'), 'human autoplay uses medium');
+        assert(seen.some(x => x.pid === true && x.lvl === 'hard'), 'bots use the room level');
+        t.destroy(); resolve();
+      } catch (e) { reject(e); }
+    }, 700);
+  });
+  // Easy < Medium < Hard over many bot-vs-bot games
+  {
+    const { tournament } = require('./botsim.js');
+    const r = tournament(['easy', 'medium', 'hard', 'medium'], 400);
+    assert(r.hard.avg > r.medium.avg + 3, 'hard beats medium (' + r.hard.avg.toFixed(1) + ' vs ' + r.medium.avg.toFixed(1) + ')');
+    assert(r.medium.avg > r.easy.avg + 5, 'medium beats easy (' + r.medium.avg.toFixed(1) + ' vs ' + r.easy.avg.toFixed(1) + ')');
+    console.log('ok   bot levels: easy ' + r.easy.avg.toFixed(1) + ' < medium ' + r.medium.avg.toFixed(1) + ' < hard ' + r.hard.avg.toFixed(1));
+  }
+
   console.log('all tests passed');
   process.exit(0);
 })().catch(e => { console.error('FAIL', e); process.exit(1); });

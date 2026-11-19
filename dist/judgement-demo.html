@@ -35,6 +35,9 @@ input:focus{border-color:var(--ac)}
 .pillb{display:flex;align-items:center;gap:calc(var(--cs)*.45);background:var(--pill);border:1px solid var(--line);border-radius:22px;padding:calc(var(--cs)*.2) calc(var(--cs)*.65) calc(var(--cs)*.2) calc(var(--cs)*.25);font-size:calc(var(--cs)*.88);color:var(--tx);max-width:46%}
 .pillb .pn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .pillb .gear{color:var(--ac);font-size:calc(var(--cs)*1.05);line-height:1}
+.cd{display:inline-block;width:.45rem;height:.45rem;border-radius:50%;background:#3ecf8e;margin-left:.5rem;vertical-align:.08em}
+.cd.wait{background:#f2b632}.cd.off{background:#e5484d}
+.bigcode{font-family:ui-monospace,Menlo,monospace;font-weight:700;letter-spacing:.3em;text-indent:.3em;color:var(--ac);font-size:min(2.8rem,15vw);line-height:1.1;margin-top:.35rem;cursor:pointer}
 .codechip{font-family:ui-monospace,Menlo,monospace;letter-spacing:.22em;color:var(--ac);font-weight:700;font-size:calc(var(--cs)*.95);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:calc(var(--cs)*.35) calc(var(--cs)*.6) calc(var(--cs)*.35) calc(var(--cs)*.8)}
 .serif{font-family:var(--serif)}
 .av{width:1.7rem;height:1.7rem;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.8rem;background:var(--ac);color:var(--btx);flex:none}
@@ -94,6 +97,9 @@ button.gc{color:var(--ac)}
 .banner .sub{font-size:.74rem;opacity:.85}
 .seats{display:grid;grid-template-columns:1fr 1fr;gap:.35rem;margin-bottom:.5rem}
 .seat{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:.4rem .6rem;font-size:.82rem;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:.1rem .4rem;min-width:0}
+.ord{flex:none;display:inline-flex;align-items:center;justify-content:center;width:1.05rem;height:1.05rem;border-radius:50%;border:1px solid var(--line);color:var(--mut);font-size:.62rem;font-weight:700;line-height:1;margin-right:.1rem}
+.ord.f{background:var(--ac);border-color:var(--ac);color:var(--btx)}
+.ord.l{border-color:var(--ac);color:var(--ac)}
 .seat .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1 1 4rem}
 .seat .st{margin-left:auto}
 .seat.me .nm{color:var(--ac);font-weight:600}
@@ -242,6 +248,62 @@ button.gc{color:var(--ac)}
     return best.pid;
   }
 
+  // ---- Bot brains: easy / medium (the original bot) / hard ----
+  var P_NON = [0.8, 0.42, 0.2, 0.08, 0.02];
+  var P_CUT = [0.95, 0.85, 0.7, 0.55, 0.4, 0.4, 0.28, 0.28, 0.28, 0.18];
+  var A_OWN = 0.5;   // how much of my own higher cards count as cover for the card below
+  function interp(tab, u) {
+    if (u <= 0) return tab[0];
+    var i = Math.floor(u), f = u - i;
+    var a = tab[Math.min(i, tab.length - 1)], b = tab[Math.min(i + 1, tab.length - 1)];
+    return a + (b - a) * f;
+  }
+  function seenSet(hand, played) {
+    var s = {};
+    hand.forEach(function (c) { s[c] = 1; });
+    (played || []).forEach(function (c) { s[c] = 1; });
+    return s;
+  }
+  // higher cards of the same suit: unseen ones (could be anywhere) and ones I hold myself
+  function higherInfo(card, hand, seen) {
+    var s = suitOf(card), r = rankOf(card), u = 0, own = 0;
+    for (var x = r + 1; x <= 14; x++) {
+      var c = s + x;
+      if (hand.indexOf(c) >= 0) own++; else if (!seen[c]) u++;
+    }
+    return { u: u, own: own };
+  }
+  function winProb(card, hand, seen, cut) {
+    var h = higherInfo(card, hand, seen);
+    return interp(suitOf(card) === cut ? P_CUT : P_NON, h.u + A_OWN * h.own);
+  }
+  function fixLast(c, target, cards, sum, isLast) {
+    c = Math.max(0, Math.min(cards, c));
+    if (isLast && sum + c === cards) {
+      var alts = [c - 1, c + 1].filter(function (x) { return x >= 0 && x <= cards; });
+      alts.sort(function (a, b) { return Math.abs(a - target) - Math.abs(b - target); });
+      c = alts[0];
+    }
+    return c;
+  }
+
+  // Hard-bot call estimate: least-squares fit of tricks made on hand features, from bot-vs-bot rounds.
+  // Keys: players -> [no cut, cut]. Order matches Bot.features.
+  var HARD_COEF = {
+    3: [[0.923, 0.81, 0.736, 0.606, 0.205, -0.144, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        [0.75, 0.679, 0.515, 0.379, 0.113, -0.145, 1.203, 1.038, 0.91, 0.804, 0.764, 0.718, 0.65, 0.62, -0.14, 0.014, -0.064]],
+    4: [[0.908, 0.729, 0.554, 0.388, 0.112, -0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        [0.679, 0.462, 0.305, 0.198, 0.028, -0.075, 1.043, 0.811, 0.676, 0.577, 0.508, 0.436, 0.36, 0.293, 0.119, 0.082, 0.011]],
+    5: [[0.902, 0.581, 0.375, 0.288, 0.081, -0.086, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        [0.597, 0.328, 0.174, 0.097, -0.01, -0.029, 0.952, 0.644, 0.513, 0.392, 0.319, 0.25, 0.176, 0.095, 0.306, 0.115, 0.046]],
+    6: [[0.853, 0.469, 0.347, 0.242, 0.048, -0.074, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        [0.483, 0.23, 0.114, 0.047, -0.013, -0.021, 0.949, 0.589, 0.441, 0.333, 0.244, 0.168, 0.105, 0.022, 0.377, 0.105, 0.036]],
+    7: [[0.733, 0.401, 0.286, 0.199, 0.052, -0.098, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        [0.401, 0.169, 0.08, 0.029, -0.013, -0.02, 0.912, 0.517, 0.362, 0.272, 0.182, 0.101, 0.03, -0.032, 0.428, 0.109, 0.037]],
+    8: [[0.599, 0.286, 0.247, 0.19, 0.041, -0.063, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        [0.312, 0.133, 0.058, 0.017, -0.01, -0.019, 0.876, 0.489, 0.321, 0.222, 0.133, 0.066, -0.012, -0.077, 0.46, 0.106, 0.033]],
+  };
+
   var Bot = {
     estimate: function (hand, cut, n) {
       var e = 0;
@@ -253,18 +315,60 @@ button.gc{color:var(--ac)}
       });
       return e * Math.max(0.55, 1 - (n - 4) * 0.06);
     },
-    call: function (hand, cut, n, cards, sumSoFar, isLast) {
-      var est = this.estimate(hand, cut, n);
-      var c = Math.round(est + (Math.random() < 0.25 ? (Math.random() < 0.5 ? -1 : 1) : 0));
-      c = Math.max(0, Math.min(cards, c));
-      if (isLast && sumSoFar + c === cards) {
-        var alts = [c - 1, c + 1].filter(function (x) { return x >= 0 && x <= cards; });
-        alts.sort(function (a, b) { return Math.abs(a - est) - Math.abs(b - est); });
-        c = alts[0];
+    // Hand features the Hard estimate is fitted on (counts of cards by how many higher cards are still out)
+    features: function (hand, cut) {
+      var f = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], seen = seenSet(hand, []);
+      var cutBk = [0, 1, 2, 3, 4, 5, 5, 6, 6, 7];   // u -> bucket for cut cards (u>=9 -> 7)
+      hand.forEach(function (c) {
+        var h = higherInfo(c, hand, seen);
+        if (suitOf(c) === cut) {
+          f[5 + 1 + (h.u >= 9 ? 7 : cutBk[h.u])] += 1;
+          if (h.u > 0 && h.own > 0) f[14] += 1;
+        } else {
+          f[Math.min(h.u, 4)] += 1;
+          if (h.u > 0 && h.own > 0) f[5] += 1;
+        }
+      });
+      if (cut) {
+        var nCut = hand.filter(function (c) { return suitOf(c) === cut; }).length;
+        SUITS.forEach(function (st) {
+          if (st === cut) return;
+          var k = hand.filter(function (c) { return suitOf(c) === st; }).length;
+          if (k === 0 && nCut) f[15] += 1;
+          if (k === 1 && nCut) f[16] += 1;
+        });
       }
-      return c;
+      return f;
     },
-    play: function (hand, led, trick, cut, need) {
+    // Hard: counts what I hold against what is still out there.
+    estimateHard: function (hand, cut, n) {
+      var w = HARD_COEF[n] && HARD_COEF[n][cut ? 1 : 0];
+      if (!w) return this.estimate(hand, cut, n);
+      var f = this.features(hand, cut), e = 0;
+      for (var i = 0; i < f.length; i++) e += f[i] * w[i];
+      return Math.max(0, Math.min(hand.length, e));
+    },
+    call: function (hand, cut, n, cards, sum, isLast, level, ctx) {
+      ctx = ctx || {};
+      var est, c;
+      if (level === 'hard' || level === 'hc') {
+        est = this.estimateHard(hand, cut, n);
+        return fixLast(Math.round(est), est, cards, sum, isLast);
+      }
+      est = this.estimate(hand, cut, n);
+      if (level === 'easy') c = Math.round(est + (Math.random() - 0.5) * 3.4);
+      else c = Math.round(est + (Math.random() < 0.25 ? (Math.random() < 0.5 ? -1 : 1) : 0));
+      return fixLast(c, est, cards, sum, isLast);
+    },
+    play: function (hand, led, trick, cut, need, level, ctx) {
+      if (level === 'hard' || level === 'hp') return this.playHard(hand, led, trick, cut, need, ctx || {});
+      if (level === 'easy' && Math.random() < 0.5) {
+        var lg = legalCards(hand, led);
+        return lg[rnd(lg.length)];
+      }
+      return this.playMedium(hand, led, trick, cut, need);
+    },
+    playMedium: function (hand, led, trick, cut, need) {
       var legal = legalCards(hand, led);
       var val = function (c) { return rankOf(c) + (suitOf(c) === cut ? 20 : 0); };
       var asc = function (a, b) { return val(a) - val(b); };
@@ -277,6 +381,17 @@ button.gc{color:var(--ac)}
       var w = legal.filter(wins), l = legal.filter(function (c) { return !wins(c); });
       if (need > 0) return w.length ? w.sort(asc)[0] : legal.slice().sort(asc)[0];
       return l.length ? l.sort(desc)[0] : legal.slice().sort(asc)[0];
+    },
+    // Hard plays like Medium, except it leads smarter when it does not want another hand:
+    // it leads the card least likely to win, counting what has already been played.
+    playHard: function (hand, led, trick, cut, need, ctx) {
+      var legal = legalCards(hand, led);
+      if (legal.length === 1) return legal[0];
+      if (led || need > 0) return this.playMedium(hand, led, trick, cut, need);
+      var seen = seenSet(hand, ctx.played);
+      var val = function (c) { return rankOf(c) + (suitOf(c) === cut ? 20 : 0); };
+      var prob = function (c) { return winProb(c, hand, seen, cut); };
+      return legal.slice().sort(function (a, b) { return prob(a) - prob(b) || val(a) - val(b); })[0];
     }
   };
 
@@ -304,6 +419,9 @@ button.gc{color:var(--ac)}
     this.ttimer = null;
     this.schedKey = null;
     this.timerSec = 0;          // turn timer: 0 = off, else 30/45/60/120
+    this.botLevel = 'medium';   // easy | medium | hard
+    this.seq = 0;               // bumps on every change so clients can order updates
+    this.played = [];
     this.timerScale = 1;        // tests shrink this
     this.turnEnd = null;
     this.chat = [];
@@ -348,6 +466,7 @@ button.gc{color:var(--ac)}
 
   Game.prototype.emit = function () {
     this.touched = Date.now();
+    this.seq++;
     this.schedule();
     this.onChange();
   };
@@ -382,6 +501,13 @@ button.gc{color:var(--ac)}
         var ts = parseInt(a.sec, 10);
         if ([0, 30, 45, 60, 120].indexOf(ts) < 0) return { err: 'Bad timer' };
         this.timerSec = ts;
+        this.emit();
+        return { ok: true };
+      }
+      case 'level': {
+        if (!isHost) return { err: 'Only the host can do that' };
+        if (['easy', 'medium', 'hard'].indexOf(a.level) < 0) return { err: 'Bad level' };
+        this.botLevel = a.level;
         this.emit();
         return { ok: true };
       }
@@ -425,7 +551,7 @@ button.gc{color:var(--ac)}
         this.players = this.players.filter(function (x) { return !x.bot; });
         this.players.forEach(function (x) { x.score = 0; x.call = null; x.made = 0; x.hand = []; });
         this.history = []; this.round = null; this.winners = []; this.trick = []; this.led = null;
-        this.schedKey = null; this.turnEnd = null;
+        this.schedKey = null; this.turnEnd = null; this.played = [];
         this.phase = 'lobby';
         this.emit();
         return { ok: true };
@@ -485,6 +611,7 @@ button.gc{color:var(--ac)}
     this.phase = 'calling';
     this.turnIdx = first;
     this.trick = []; this.led = null; this.trickWinner = null;
+    this.played = [];
     this.emit();
   };
 
@@ -521,6 +648,7 @@ button.gc{color:var(--ac)}
     p.hand = p.hand.filter(function (c) { return c !== card; });
     if (!this.trick.length) this.led = suitOf(card);
     this.trick.push({ pid: p.id, card: card });
+    this.played.push(card);
     if (this.trick.length < this.n) {
       this.turnIdx = (this.turnIdx + 1) % this.n;
       this.emit();
@@ -600,12 +728,15 @@ button.gc{color:var(--ac)}
   Game.prototype.botAct = function (pid) {
     var cur = this.players[this.turnIdx];
     if (!cur || cur.id !== pid) return;
+    // a human whose time ran out (or who is away) is played for at Medium, whatever the bot level is
+    var level = cur.bot ? (cur.level || this.botLevel) : 'medium';
     if (this.phase === 'calling') {
       var cs = this.callState();
-      var n = Bot.call(cur.hand, this.round.cut, this.n, this.round.cards, cs.sum, cs.isLast);
+      var k = this.players.filter(function (p) { return p.call !== null; }).length;
+      var n = Bot.call(cur.hand, this.round.cut, this.n, this.round.cards, cs.sum, cs.isLast, level, { k: k });
       this.doCall(cur, n);
     } else if (this.phase === 'playing') {
-      var c = Bot.play(cur.hand, this.led, this.trick, this.round.cut, cur.call - cur.made);
+      var c = Bot.play(cur.hand, this.led, this.trick, this.round.cut, cur.call - cur.made, level, { n: this.n, played: this.played });
       this.doPlay(cur, c);
     }
   };
@@ -632,7 +763,7 @@ button.gc{color:var(--ac)}
       history: this.history, round: this.round, turn: turn, led: this.led,
       trick: this.trick, trickWinner: this.trickWinner, winners: this.winners,
       hand: me && inGame ? me.hand : [], legal: [], callInfo: null,
-      timerSec: this.timerSec,
+      timerSec: this.timerSec, botLevel: this.botLevel, seq: this.seq,
       turnLeft: this.turnEnd && (this.phase === 'calling' || this.phase === 'playing') ? Math.max(0, this.turnEnd - Date.now()) : null,
       chat: this.chat.slice(-50)
     };
@@ -659,6 +790,7 @@ var THEMES=[['mid','Midnight'],['ivo','Ivory'],['felt','Felt'],['ruby','Ruby']];
 var SIZES=['Normal','Large','Larger','Huge'];
 var FS=[16,18,20,23];
 var TIMERS=[0,30,45,60,120];
+var LEVELS=[['easy','Easy'],['medium','Medium'],['hard','Hard']];
 function timerLabel(t){return !t?'Off':t<60?t+' s':(t/60)+' min'}
 var SY={S:'♠',H:'♥',C:'♣',D:'♦'};
 var SN=E.SUIT_NAME;
@@ -688,7 +820,30 @@ function toast(t){var el=$('#toast');el.innerHTML='<div class="toast">'+esc(t)+'
 function api(path,body){
   return fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json()});
 }
+var seq=-1,lastSse=0,conn='ok',failN=0,pollT=null,rtt=null,syncing=false,lastTry=0;
+function connText(){
+  if(conn==='off')return 'Offline. Waiting for the network…';
+  if(conn==='wait')return 'Reconnecting…';
+  return 'Connected'+(rtt!=null?' · '+rtt+' ms'+(rtt>800?' (slow)':''):'');
+}
+function paintConn(){
+  var d=$('#cd'),t=$('#ct'),c=$('#connst');
+  if(d)d.className='cd '+conn;
+  if(t)t.textContent=conn==='ok'?'':(conn==='off'?' Offline':' Reconnecting…');
+  if(c)c.textContent=connText();
+}
+function setConn(v){if(conn!==v){conn=v;paintConn()}}
+function verHTML(){return '<div class="ver">'+VER+(sess&&!isLocal?'<span class="cd '+conn+'" id="cd"></span><span id="ct">'+(conn==='ok'?'':(conn==='off'?' Offline':' Reconnecting…'))+'</span>':'')+'</div>'}
+function pingNow(){
+  if(isLocal||DEMO||!sess)return;
+  var t0=performance.now();
+  fetch('/api/ping',{cache:'no-store'}).then(function(r){return r.json()}).then(function(){rtt=Math.round(performance.now()-t0);paintConn()}).catch(function(){});
+}
+setInterval(function(){if(modal==='settings')pingNow()},5000);
 function onSnap(s){
+  // updates can arrive twice (stream and action reply) or out of order: only newer ones count
+  if(!isLocal&&s.seq!=null&&s.seq<=seq)return;
+  if(s.seq!=null)seq=s.seq;
   // keep the selected card only while it is still playable
   if(sel&&(s.hand.indexOf(sel)<0||s.phase!=='playing'||s.turn!==s.me||s.legal.indexOf(sel)<0))sel=null;
   if(!sel&&s.phase==='playing'&&s.turn===s.me&&s.legal.length===1)sel=s.legal[0];
@@ -697,21 +852,73 @@ function onSnap(s){
   if(chatOpen)chatSeen=lastChatId();
   render();
 }
-function connect(){
-  if(es)es.close();
-  es=new EventSource('/api/stream?code='+sess.code+'&token='+sess.token);
-  es.onmessage=function(e){onSnap(JSON.parse(e.data))};
-  es.addEventListener('removed',function(){
-    es.close();es=null;sess=null;save('jd_sess',null);snap=null;modal=null;chatOpen=false;toast('You were removed from the room');render();
-  });
-  es.onerror=function(){if(es&&es.readyState===2){es=null}};
+function roomGone(){
+  if(es){es.close();es=null}
+  stopPoll();sess=null;save('jd_sess',null);snap=null;modal=null;chatOpen=false;seq=-1;
+  toast('That room is no longer available');render();
 }
+// ask the server for the current state (after a stall, on waking, or as the polling fallback)
+function resync(){
+  if(!sess||isLocal||syncing)return;
+  syncing=true;
+  fetch('/api/state?code='+sess.code+'&token='+sess.token,{cache:'no-store'})
+    .then(function(r){return r.json().then(function(j){return{st:r.status,j:j}})})
+    .then(function(x){
+      syncing=false;
+      if(x.st===404){roomGone();return}
+      if(x.j&&x.j.s){setConn('ok');onSnap(x.j.s)}
+    }).catch(function(){syncing=false;setConn(navigator.onLine===false?'off':'wait')});
+}
+function startPoll(){if(!pollT)pollT=setInterval(resync,1500)}
+function stopPoll(){if(pollT){clearInterval(pollT);pollT=null}}
+function connect(){
+  if(es){try{es.close()}catch(e){}es=null}
+  if(!sess)return;
+  var my=es=new EventSource('/api/stream?code='+sess.code+'&token='+sess.token);
+  var alive=function(){if(es!==my)return false;failN=0;lastSse=Date.now();stopPoll();setConn('ok');return true};
+  my.onopen=alive;
+  my.onmessage=function(e){if(alive())onSnap(JSON.parse(e.data))};
+  my.addEventListener('hb',function(e){
+    if(!alive())return;
+    try{var d=JSON.parse(e.data);if(d.seq!=null&&d.seq>seq)resync()}catch(x){}
+  });
+  my.addEventListener('removed',function(){
+    if(es!==my)return;
+    my.close();es=null;stopPoll();sess=null;save('jd_sess',null);snap=null;modal=null;chatOpen=false;seq=-1;toast('You were removed from the room');render();
+  });
+  my.onerror=function(){
+    if(es!==my)return;
+    failN++;setConn(navigator.onLine===false?'off':'wait');
+    if(my.readyState===2){es=null;resync()}   // closed for good (room gone, server restarted)
+    if(failN>=3)startPoll();
+  };
+}
+// the server sends a heartbeat every 10 s; silence for 25 s means the stream is dead
+setInterval(function(){
+  if(!sess||isLocal||!snap)return;
+  if(Date.now()-lastSse>25000){
+    setConn(navigator.onLine===false?'off':'wait');startPoll();
+    if(Date.now()-lastTry>10000){lastTry=Date.now();connect();resync()}
+  }
+},4000);
+function wake(){
+  if(!sess||isLocal)return;
+  resync();
+  if(!es||es.readyState!==1||Date.now()-lastSse>15000)connect();
+}
+document.addEventListener('visibilitychange',function(){if(!document.hidden)wake()});
+window.addEventListener('online',function(){setConn('wait');wake()});
+window.addEventListener('offline',function(){setConn('off')});
+window.addEventListener('pageshow',function(e){if(e.persisted)wake()});
 function act(a){
   if(isLocal){var r=game.act(me,a);if(r&&r.err)toast(r.err);if(a.type==='chat')demoReply();return}
-  api('/api/act',{code:sess.code,token:sess.token,a:a}).then(function(r){if(r&&r.err)toast(r.err)}).catch(function(){toast('Connection problem')});
+  api('/api/act',{code:sess.code,token:sess.token,a:a}).then(function(r){
+    if(r&&r.err){toast(r.err);return}
+    if(r&&r.s){onSnap(r.s);if(modal==='settings')renderModal()}
+  }).catch(function(){toast('Connection problem');setTimeout(resync,800)});
 }
 function enter(r){
-  sess={code:r.code,token:r.token};save('jd_sess',sess);me=r.pid;connect();
+  sess={code:r.code,token:r.token};save('jd_sess',sess);me=r.pid;seq=-1;connect();
 }
 function create(){
   var n=$('#nm').value.trim();
@@ -762,7 +969,7 @@ function demoBar(){
 function leave(){
   if(DEMO){location.reload();return}
   if(isLocal){game.destroy();game=null;isLocal=false}
-  else{act({type:'leave'});if(es){es.close();es=null}sess=null;save('jd_sess',null)}
+  else{act({type:'leave'});if(es){es.close();es=null}stopPoll();sess=null;seq=-1;save('jd_sess',null)}
   snap=null;modal=null;chatOpen=false;sel=null;stopFw();render();
 }
 function tryRejoin(){
@@ -803,6 +1010,11 @@ function pill(){
 function topbar(){
   return '<div class="top"><button class="ib" data-a="rules">Rules</button><button class="codechip" data-a="copy" aria-label="Copy invite link">'+(DEMO?'DEMO':esc(snap.code))+'</button>'+pill()+'</div>';
 }
+function botChips(isHost,cur){
+  var h='<div class="chips">';
+  LEVELS.forEach(function(l){h+='<button class="chip '+(cur===l[0]?'on':'')+'" '+(isHost?'data-a="level" data-v="'+l[0]+'"':'disabled')+'>'+l[1]+'</button>'});
+  return h+'</div>';
+}
 function timerChips(isHost,cur){
   var h='<div class="chips">';
   TIMERS.forEach(function(t){h+='<button class="chip '+(cur===t?'on':'')+'" '+(isHost?'data-a="timer" data-s="'+t+'"':'disabled')+'>'+timerLabel(t)+'</button>'});
@@ -829,8 +1041,8 @@ function renderHome(){
 }
 function renderLobby(){
   var s=snap,isHost=s.host===s.me,humans=s.players.length,bots=s.botCount,total=s.n;
-  var h='<div class="ver">'+VER+'</div>'+topbar()
-   +'<div class="center" style="margin:.9rem 0 .3rem"><div class="lab">Share this room</div>'
+  var h=verHTML()+topbar()
+   +'<div class="center" style="margin:.9rem 0 .3rem"><div class="lab">Share this room</div><div class="bigcode" data-a="copy" aria-label="Copy invite link">'+(DEMO?'DEMO':esc(s.code))+'</div>'
    +(DEMO?'':'<div style="margin-top:.5rem"><button class="sm" style="padding:.4rem 1rem;font-size:.85rem;border-radius:20px" data-a="copy">Copy invite link</button></div>')+'</div>'
    +'<div class="row2" style="justify-content:space-between;align-items:center;margin:1rem 0 .5rem"><span class="lab">Players at the table</span><span style="font-weight:600">'+total+' <span class="tag">of 3–8</span></span></div>';
   s.players.forEach(function(p){
@@ -910,9 +1122,10 @@ function banner(){
   return '<div class="banner'+(on?' mine':'')+'"><b>'+m+'</b><span class="sub">'+sub+'</span></div>';
 }
 function seatsHTML(){
-  var s=snap,h='<div class="seats">';
-  s.players.forEach(function(p){
-    h+='<div class="seat '+(p.id===s.me?'me ':'')+(s.turn===p.id&&s.phase!=='trickdone'?'turn ':'')+(p.bot||p.connected?'':'off')+'"><span class="nm">'+esc(p.name)+'</span>'
+  var s=snap,h='<div class="seats">',n=s.players.length;
+  s.players.forEach(function(p,i){
+    var o=(i-s.round.first+n)%n+1;   // calling order this round: 1 calls first, n calls last
+    h+='<div class="seat '+(p.id===s.me?'me ':'')+(s.turn===p.id&&s.phase!=='trickdone'?'turn ':'')+(p.bot||p.connected?'':'off')+'"><span class="ord'+(o===1?' f':o===n?' l':'')+'" title="'+(o===1?'Calls first':o===n?'Calls last':'Call order')+'">'+o+'</span><span class="nm">'+esc(p.name)+'</span>'
      +'<span class="st">Made <b>'+p.made+'</b> · Call <b>'+(p.call===null?'–':p.call)+'</b></span></div>';
   });
   return h+'</div>';
@@ -1006,7 +1219,7 @@ function actHTML(){
 }
 function renderGame(){
   var s=snap,r=s.round,W=cw();
-  var h='<div class="gmain"><div class="ver">'+VER+'</div>'+topbar()
+  var h='<div class="gmain">'+verHTML()+topbar()
    +'<div class="gchips"><div class="gc">Round <b>'+(r.i+1)+'</b>/'+s.per+'</div>'
    +'<div class="gc">Cut <b class="'+(r.cut&&isRed(r.cut)?'rd':'')+'">'+cutLabel(r.cut)+'</b></div>'
    +'<button class="gc" data-a="screen">Screen</button>'+ringHTML()+'</div>'
@@ -1078,7 +1291,7 @@ function screenHTML(){
   h+='</tr></tfoot></table></div><div class="legend">Highlighted: call made (10 + call). Struck-off call: missed, 0 points. Shaded row: round in progress, made so far. ∅ = no cut. Scroll sideways or down for more.</div>';
   return h;
 }
-function showModal(kind){modal=kind;modalFresh=true;renderModal();renderOver()}
+function showModal(kind){modal=kind;modalFresh=true;renderModal();renderOver();if(kind==='settings')pingNow()}
 function closeModal(){modal=null;renderModal()}
 function renderModal(){
   var el=$('#modal');
@@ -1120,6 +1333,8 @@ function settingsHTML(){
   if(s&&mp){
     h+='<h3>Your name</h3><div class="row2"><input id="sn" maxlength="16" value="'+esc(mp.name)+'"><button data-a="rename">Save</button></div>';
     h+='<h3>Turn timer'+(isHost?' · host':' · set by host')+'</h3>'+timerChips(isHost,s.timerSec);
+    if(s.botCount>0)h+='<h3>Bot difficulty'+(isHost?' · host':' · set by host')+'</h3>'+botChips(isHost,s.botLevel||'medium');
+    if(!isLocal&&!DEMO)h+='<h3>Connection</h3><div class="note" id="connst" style="text-align:left;margin:0">'+connText()+'</div>';
   }
   h+='<h3>Text size</h3><div class="chips">';
   SIZES.forEach(function(n,i){h+='<button class="chip '+(ui.fs===i?'on':'')+'" data-a="fs" data-i="'+i+'">'+n+'</button>'});
@@ -1211,6 +1426,7 @@ document.addEventListener('click',function(e){
       break}
     case 'size':{var d=parseInt(t.dataset.d,10);act({type:'size',size:snap.n+d});break}
     case 'timer':act({type:'timer',sec:parseInt(t.dataset.s,10)});if(modal==='settings')setTimeout(renderModal,60);break;
+    case 'level':act({type:'level',level:t.dataset.v});if(modal==='settings')setTimeout(renderModal,60);break;
     case 'start':act({type:'start'});break;
     case 'call':act({type:'call',n:parseInt(t.dataset.n,10)});break;
     case 'pick':sel=(sel===t.dataset.c)?null:t.dataset.c;render();break;
@@ -1249,6 +1465,12 @@ addEventListener('resize',function(){
 
 applyUI();render();
 if(sess&&!DEMO)tryRejoin();
+// small hook so the connection logic can be tested from outside
+window.__jd={st:function(){return{seq:seq,conn:conn,poll:!!pollT,snap:snap}},
+  kill:function(stale){if(es)es.close();lastSse=Date.now()-(stale||0)},
+  fakeStream:function(){window.__ES=window.__ES||window.EventSource;window.EventSource=function(){this.readyState=0;this.close=function(){};this.addEventListener=function(){}};if(es)es.close();connect();lastSse=Date.now()-30000},
+  realStream:function(){if(window.__ES)window.EventSource=window.__ES;connect()},
+  act:act,wake:wake};
 })();
 </script>
 </body>
