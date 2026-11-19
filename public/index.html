@@ -28,6 +28,18 @@ input:focus{border-color:var(--ac)}
 .gmain{flex:1 1 0;min-height:0;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;overscroll-behavior:contain}
 .gmain>*{flex-shrink:0}
 .gmain>.table{flex:1 1 0;min-height:6.5rem}
+@media (max-height:739px){
+  #app.game{padding-top:.15rem}
+  #app.game .ver{padding:0 0 calc(var(--cs)*.15)}
+  #app.game .top{min-height:calc(var(--cs)*2.3);margin-bottom:0}
+  #app.game .gchips{margin:calc(var(--cs)*.1) 0 calc(var(--cs)*.3);min-height:calc(var(--cs)*2.3)}
+  #app.game .gc{padding:calc(var(--cs)*.25) calc(var(--cs)*.6)}
+  #app.game .chatbar{min-height:calc(var(--cs)*2.1);margin-bottom:calc(var(--cs)*.3)}
+  #app.game .banner{padding:.32rem .7rem;margin-bottom:.3rem}
+  #app.game .seats{gap:.25rem;margin-bottom:.3rem}
+  #app.game .hand{padding-top:1.2rem}
+  #app.game .act{padding-top:.35rem}
+}
 #app.game>.act{flex:none}
 .ver{text-align:center;font-size:calc(var(--cs)*.66);color:var(--mut);letter-spacing:.06em;padding:calc(var(--cs)*.05) 0 calc(var(--cs)*.3)}
 .top{display:flex;align-items:center;justify-content:space-between;gap:calc(var(--cs)*.5);min-height:calc(var(--cs)*2.6);margin-bottom:calc(var(--cs)*.15)}
@@ -37,6 +49,7 @@ input:focus{border-color:var(--ac)}
 .pillb .gear{color:var(--ac);font-size:calc(var(--cs)*1.05);line-height:1}
 .cd{display:inline-block;width:.45rem;height:.45rem;border-radius:50%;background:#3ecf8e;margin-left:.5rem;vertical-align:.08em}
 .cd.wait{background:#f2b632}.cd.off{background:#e5484d}
+.chatform input,#cin{font-size:max(16px,1rem)}
 .bigcode{font-family:ui-monospace,Menlo,monospace;font-weight:700;letter-spacing:.3em;text-indent:.3em;color:var(--ac);font-size:min(2.8rem,15vw);line-height:1.1;margin-top:.35rem;cursor:pointer}
 .codechip{font-family:ui-monospace,Menlo,monospace;letter-spacing:.22em;color:var(--ac);font-weight:700;font-size:calc(var(--cs)*.95);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:calc(var(--cs)*.35) calc(var(--cs)*.6) calc(var(--cs)*.35) calc(var(--cs)*.8)}
 .serif{font-family:var(--serif)}
@@ -97,6 +110,10 @@ button.gc{color:var(--ac)}
 .banner .sub{font-size:.74rem;opacity:.85}
 .seats{display:grid;grid-template-columns:1fr 1fr;gap:.35rem;margin-bottom:.5rem}
 .seat{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:.4rem .6rem;font-size:.82rem;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:.1rem .4rem;min-width:0}
+.seats.cmp .seat{flex-wrap:nowrap;padding:.2rem .5rem;font-size:.8rem;gap:.35rem}
+.seats.cmp .seat .nm{flex:1 1 0}
+.seats.cmp .st{font-size:.8rem;color:var(--tx)}
+.legend{grid-column:1/-1;text-align:right;font-size:.6rem;letter-spacing:.06em;color:var(--mut);line-height:1;margin:0 .2rem -.05rem}
 .ord{flex:none;display:inline-flex;align-items:center;justify-content:center;width:1.05rem;height:1.05rem;border-radius:50%;border:1px solid var(--line);color:var(--mut);font-size:.62rem;font-weight:700;line-height:1;margin-right:.1rem}
 .ord.f{background:var(--ac);border-color:var(--ac);color:var(--btx)}
 .ord.l{border-color:var(--ac);color:var(--ac)}
@@ -265,6 +282,7 @@ function pingNow(){
 }
 setInterval(function(){if(modal==='settings')pingNow()},5000);
 function onSnap(s){
+  if(!isLocal&&!sess)return;   // late replies after leaving a room must not bring it back
   // updates can arrive twice (stream and action reply) or out of order: only newer ones count
   if(!isLocal&&s.seq!=null&&s.seq<=seq)return;
   if(s.seq!=null)seq=s.seq;
@@ -336,8 +354,14 @@ window.addEventListener('offline',function(){setConn('off')});
 window.addEventListener('pageshow',function(e){if(e.persisted)wake()});
 function act(a){
   if(isLocal){var r=game.act(me,a);if(r&&r.err)toast(r.err);if(a.type==='chat')demoReply();return}
+  var mine=sess;
   api('/api/act',{code:sess.code,token:sess.token,a:a}).then(function(r){
-    if(r&&r.err){toast(r.err);return}
+    if(r&&r.err){
+      // a stale tap (turn already moved on, round already dealt): quietly refresh instead of an error
+      if(r.err==='Not your turn'||r.err==='Not now'){resync();return}
+      toast(r.err);return
+    }
+    if(sess!==mine)return;
     if(r&&r.s){onSnap(r.s);if(modal==='settings')renderModal()}
   }).catch(function(){toast('Connection problem');setTimeout(resync,800)});
 }
@@ -429,7 +453,7 @@ function backFan(){
 }
 function pill(){
   var mp=snap&&player(snap.me);
-  return '<button class="pillb" data-a="settings" aria-label="Settings"><span class="av">'+esc(mp?mp.name[0].toUpperCase():'?')+'</span><span class="pn">'+esc(mp?mp.name:'')+'</span><span class="gear">⚙︎</span></button>';
+  return '<button class="pillb" data-a="settings" aria-label="Settings"><span class="av">'+esc(mp?Array.from(mp.name)[0].toUpperCase():'?')+'</span><span class="pn">'+esc(mp?mp.name:'')+'</span><span class="gear">⚙︎</span></button>';
 }
 function topbar(){
   return '<div class="top"><button class="ib" data-a="rules">Rules</button><button class="codechip" data-a="copy" aria-label="Copy invite link">'+(DEMO?'DEMO':esc(snap.code))+'</button>'+pill()+'</div>';
@@ -470,7 +494,7 @@ function renderLobby(){
    +(DEMO?'':'<div style="margin-top:.5rem"><button class="sm" style="padding:.4rem 1rem;font-size:.85rem;border-radius:20px" data-a="copy">Copy invite link</button></div>')+'</div>'
    +'<div class="row2" style="justify-content:space-between;align-items:center;margin:1rem 0 .5rem"><span class="lab">Players at the table</span><span style="font-weight:600">'+total+' <span class="tag">of 3–8</span></span></div>';
   s.players.forEach(function(p){
-    h+='<div class="seatrow"><div class="av">'+esc(p.name[0].toUpperCase())+'</div><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">'+esc(p.name)+(p.id===s.me?' (you)':'')+'</span>'
+    h+='<div class="seatrow"><div class="av">'+esc(Array.from(p.name)[0].toUpperCase())+'</div><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">'+esc(p.name)+(p.id===s.me?' (you)':'')+'</span>'
      +'<span class="tag">'+(p.id===s.host?'Host':(p.connected?'Joined':'Away'))+'</span>'
      +(isHost&&p.id!==s.me?'<button class="sm" data-a="kick" data-p="'+p.id+'">Remove</button>':'')+'</div>';
   });
@@ -546,11 +570,12 @@ function banner(){
   return '<div class="banner'+(on?' mine':'')+'"><b>'+m+'</b><span class="sub">'+sub+'</span></div>';
 }
 function seatsHTML(){
-  var s=snap,h='<div class="seats">',n=s.players.length;
+  var s=snap,n=s.players.length,cmp=n>=6&&innerHeight<760;   // crowded table on a short phone: one line per player
+  var h='<div class="seats'+(cmp?' cmp':'')+'">'+(cmp?'<div class="legend">hands made / called</div>':'');
   s.players.forEach(function(p,i){
     var o=(i-s.round.first+n)%n+1;   // calling order this round: 1 calls first, n calls last
     h+='<div class="seat '+(p.id===s.me?'me ':'')+(s.turn===p.id&&s.phase!=='trickdone'?'turn ':'')+(p.bot||p.connected?'':'off')+'"><span class="ord'+(o===1?' f':o===n?' l':'')+'" title="'+(o===1?'Calls first':o===n?'Calls last':'Call order')+'">'+o+'</span><span class="nm">'+esc(p.name)+'</span>'
-     +'<span class="st">Made <b>'+p.made+'</b> · Call <b>'+(p.call===null?'–':p.call)+'</b></span></div>';
+     +(cmp?'<span class="st"><b>'+p.made+'</b> / <b>'+(p.call===null?'–':p.call)+'</b></span></div>':'<span class="st">Made <b>'+p.made+'</b> · Call <b>'+(p.call===null?'–':p.call)+'</b></span></div>');
   });
   return h+'</div>';
 }
@@ -569,22 +594,27 @@ function handNo(){
 }
 /* Picks rows / card size so every player's slot fits the space the table actually has. */
 function tableLayout(n,W,avail){
-  var best=null;
-  [1,2,3].forEach(function(rows){
-    var per=Math.ceil(n/rows);
-    if(rows>1&&per<2)return;
-    var tw=Math.min(100,Math.floor((W-14)/per)-10),th=Math.round(tw*1.4);
-    if(tw<34)return;
-    if(rows*(th+40)+44<=avail&&(!best||tw>best.tw))best={rows:rows,per:per,tw:tw,th:th};
-  });
-  if(best)best.fit=true;
-  if(!best){
-    var rows=n>6?2:1,per=Math.ceil(n/rows);
-    var th0=Math.floor((avail-44)/rows)-40;
-    var tw=Math.max(30,Math.min(Math.floor((W-14)/per)-10,Math.floor(th0/1.4)));
-    best={rows:rows,per:per,tw:tw,th:Math.round(tw*1.4),fit:false};
+  /* height a layout really needs: padding 32 + rows of (card + name 17) + 22px between rows (room for the LEADS/CUT tag) */
+  function need(rows,th){return 32+rows*(th+17)+(rows-1)*22}
+  function pick(minTw,spare){
+    var best=null;
+    [1,2,3].forEach(function(rows){
+      var per=Math.ceil(n/rows);
+      if(rows>1&&per<2)return;
+      var byH=Math.floor(((avail-spare-32-(rows-1)*22)/rows-17)/1.4);   // widest card the height allows for this many rows
+      var tw=Math.min(100,Math.floor((W-14)/per)-10,byH),th=Math.round(tw*1.4);
+      if(tw<minTw||need(rows,th)+spare>avail)return;
+      if(!best||tw>best.tw)best={rows:rows,per:per,tw:tw,th:th};
+    });
+    return best;
   }
-  return best;
+  var best=pick(34,18);                      // roomy: also leaves space for the "Hand x of y" caption
+  if(best){best.fit=true;return best}
+  best=pick(28,0);                           // tight: smaller cards, no caption
+  if(best){best.fit=false;return best}
+  var rows=n>6?2:1,per=Math.ceil(n/rows),th0=Math.floor((avail-32-(rows-1)*22)/rows)-17;   // nothing fits: shrink as far as sensible
+  var tw=Math.max(26,Math.min(Math.floor((W-14)/per)-10,Math.floor(th0/1.4)));
+  return {rows:rows,per:per,tw:tw,th:Math.round(tw*1.4),fit:false};
 }
 function fillTable(W){
   var tb=$('#tbl');

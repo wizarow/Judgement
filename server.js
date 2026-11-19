@@ -74,6 +74,10 @@ function serveStatic(req, res, url) {
   });
 }
 
+// A stray error in a timer must not take every room down with it.
+process.on('uncaughtException', e => console.error('uncaught', e));
+process.on('unhandledRejection', e => console.error('unhandled', e));
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   try {
@@ -145,7 +149,7 @@ const server = http.createServer(async (req, res) => {
         if (!p) return send(res, 404, { err: 'Room not found' });
         const r = g.act(p.id, b.a);
         // the reply carries the sender's fresh state so their screen updates without waiting for the stream
-        if (r && r.ok && g.byId(p.id)) r.s = g.snapshot(p.id);
+        if (r && r.ok && g.byId(p.id) && !(b.a && b.a.type === 'leave')) r.s = g.snapshot(p.id);
         return send(res, 200, r);
       }
     }

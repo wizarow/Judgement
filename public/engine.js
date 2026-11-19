@@ -189,7 +189,7 @@
   };
 
   function cleanName(name) {
-    return String(name || '').replace(/\s+/g, ' ').trim().slice(0, 16);
+    return Array.from(String(name || '').replace(/\s+/g, ' ').trim()).slice(0, 16).join('');   // by character, so emoji are not cut in half
   }
 
   function Game(code, opts) {
@@ -335,7 +335,7 @@
       case 'call': return this.doCall(p, a.n);
       case 'play': return this.doPlay(p, a.card);
       case 'next': {
-        if (this.phase !== 'roundover') return { err: 'Not now' };
+        if (this.phase !== 'roundover') return { ok: true };   // someone else already dealt: nothing to do
         this.startRound(this.round.i + 1);
         return { ok: true };
       }
