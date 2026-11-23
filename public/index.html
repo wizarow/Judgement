@@ -1173,7 +1173,16 @@ document.addEventListener('keydown',function(e){
   if(e.key==='Escape'&&sheet){sheet=null;render()}
 });
 var rsT=null;
-addEventListener('resize',function(){clearTimeout(rsT);rsT=setTimeout(function(){if(snap)render();else{var nm=$('#nm'),v=nm&&nm.value;homeFw=null;renderHome();if(v!=null&&$('#nm'))$('#nm').value=v}},120)});
+// On phones the on-screen keyboard shrinks the window height. Redrawing then would replace the text box
+// being typed in and close the keyboard, so only redraw when the width changes (rotation, desktop resize),
+// or on a height change while nothing is being typed.
+var lastW=innerWidth;
+function typing(){var a=document.activeElement;return !!a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA')}
+addEventListener('resize',function(){clearTimeout(rsT);rsT=setTimeout(function(){
+  var widthChanged=innerWidth!==lastW;lastW=innerWidth;
+  if(!widthChanged&&typing())return;
+  if(snap)render();else{var nm=$('#nm'),v=nm&&nm.value,rc=$('#rc'),rv=rc&&rc.value;homeFw=null;renderHome();if(v!=null&&$('#nm'))$('#nm').value=v;if(rv!=null&&$('#rc'))$('#rc').value=rv}
+},120)});
 matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyUI);
 
 applyUI();render();
