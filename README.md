@@ -35,20 +35,22 @@ Don't redeploy mid-game: live rooms are held in memory and drop on restart. The 
 ## Screens (v2 · notebook)
 - Home: the page of a ruled notebook. Bigger fanned cards (tap to re-deal), name, Start a room, or Join with a 4-letter code.
   How to play top-left, Settings top-right. The whole block is centred with equal space above and below.
-- Lobby ("Who's here"): big room code (tap to copy the invite link), each player with a green dot and Joined/Away;
-  bot seats shown until a friend takes them. Host starts; guests see "Waiting for <host> to start".
+- Home also has "Auto start with bots · 4 players" at the bottom: makes a room, fills 3 bot seats and starts.
+- Lobby ("Who's here"): big room code (tap to copy the invite link), each player with a green dot and Joined/Away.
+  Host removes players (with confirm), adds bots (+ Add bot) and removes them right in the list. Guests see "Waiting for <host> to start".
 - Game: header with round, cards and the cut suit (large). One ruled line per player: calling-order number
   (filled = calls first, red = calls last), name, "1 of 2" hands made vs called (red when over), total.
   Away players show "away · auto-plays"; on their turn the status reads "<name> is away · auto-plays in 85s".
   Calling pad: numbers 0..cards, the forbidden last-caller number struck out with the reason. No suggestions.
-  Play a card by flicking it up, or tap it twice. The winning card gets an ink circle.
+  Play a card by flicking it up, or tap it to pick it and press the Play button under your hand (tap again to put it back). The winning card gets an ink circle.
 - Screen: shown on the page between rounds (Hide returns to the table with The Screen / Deal buttons).
   Made calls show their points in bold; missed calls are struck in red with the hands actually made.
 - Chat: every new message pops up as a sticky note. Quick replies plus free text.
 
 ## Settings (one panel, sliders icon)
-Players (host removes, with confirm), bots (lobby only), bot difficulty, turn timer, paper (match phone / white / black),
-ink colour (blue, black, green, purple, red), text size, your name, connection status, leave, how to play.
+Players (host removes, with confirm), bots (lobby only), bot difficulty, turn timer,
+paper (white by default; legal pad, mint, blush, sky, kraft, black, chalkboard, midnight, or match phone),
+ink colour (blue, black, green, purple, red), text size, your name, connection status, how to play, and Leave last.
 
 ## Notes
 - Name is required to create or join. Rejoin after a refresh is automatic on the same device.
