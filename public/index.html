@@ -20,7 +20,7 @@
   color-scheme:light;
 }
 @media (prefers-color-scheme:dark){
-  :root:not([data-theme="paper"]):not([data-theme="light"]){
+  :root:not([data-paper]):not([data-theme="light"]){
     --page:#18181B;--desk:#0E0E10;--rule:#2A3142;--margin:#5E2C2C;
     --ink:#9DB8FF;--ink-soft:rgba(157,184,255,.14);--red:#FF7A6B;--graphite:#ECE8DD;--pencil:#A4A29B;
     --hl:rgba(196,255,64,.22);--sticky:#3D3820;--sticky-ink:#F4EBC0;
@@ -28,7 +28,7 @@
     color-scheme:dark;
   }
 }
-:root[data-theme="black"],:root[data-theme="dark"],:root[data-theme="chalk"],:root[data-theme="midnight"]{
+:root[data-paper="black"],:root:not([data-paper])[data-theme="dark"],:root[data-paper="chalk"],:root[data-paper="midnight"]{
   --page:#18181B;--desk:#0E0E10;--rule:#2A3142;--margin:#5E2C2C;
   --ink:#9DB8FF;--ink-soft:rgba(157,184,255,.14);--red:#FF7A6B;--graphite:#ECE8DD;--pencil:#A4A29B;
   --hl:rgba(196,255,64,.22);--sticky:#3D3820;--sticky-ink:#F4EBC0;
@@ -36,27 +36,27 @@
   color-scheme:dark;
 }
 :root[data-ink="black"]{--ink:#1E1E22;--ink-soft:rgba(30,30,34,.10)}
-@media (prefers-color-scheme:dark){:root[data-ink="black"]:not([data-theme="paper"]):not([data-theme="light"]){--ink:#F2EEE6;--ink-soft:rgba(242,238,230,.14)}}
-:root[data-ink="black"][data-theme="black"],:root[data-ink="black"][data-theme="dark"],:root[data-ink="black"][data-theme="chalk"],:root[data-ink="black"][data-theme="midnight"]{--ink:#F2EEE6;--ink-soft:rgba(242,238,230,.14)}
+@media (prefers-color-scheme:dark){:root[data-ink="black"]:not([data-paper]):not([data-theme="light"]){--ink:#F2EEE6;--ink-soft:rgba(242,238,230,.14)}}
+:root[data-ink="black"][data-paper="black"],:root[data-ink="black"]:not([data-paper])[data-theme="dark"],:root[data-ink="black"][data-paper="chalk"],:root[data-ink="black"][data-paper="midnight"]{--ink:#F2EEE6;--ink-soft:rgba(242,238,230,.14)}
 :root[data-ink="green"]{--ink:#1D6A43;--ink-soft:rgba(29,106,67,.12)}
-@media (prefers-color-scheme:dark){:root[data-ink="green"]:not([data-theme="paper"]):not([data-theme="light"]){--ink:#86DDB0;--ink-soft:rgba(134,221,176,.14)}}
-:root[data-ink="green"][data-theme="black"],:root[data-ink="green"][data-theme="dark"],:root[data-ink="green"][data-theme="chalk"],:root[data-ink="green"][data-theme="midnight"]{--ink:#86DDB0;--ink-soft:rgba(134,221,176,.14)}
+@media (prefers-color-scheme:dark){:root[data-ink="green"]:not([data-paper]):not([data-theme="light"]){--ink:#86DDB0;--ink-soft:rgba(134,221,176,.14)}}
+:root[data-ink="green"][data-paper="black"],:root[data-ink="green"]:not([data-paper])[data-theme="dark"],:root[data-ink="green"][data-paper="chalk"],:root[data-ink="green"][data-paper="midnight"]{--ink:#86DDB0;--ink-soft:rgba(134,221,176,.14)}
 :root[data-ink="purple"]{--ink:#5A2A98;--ink-soft:rgba(90,42,152,.12)}
-@media (prefers-color-scheme:dark){:root[data-ink="purple"]:not([data-theme="paper"]):not([data-theme="light"]){--ink:#C9A8FF;--ink-soft:rgba(201,168,255,.15)}}
-:root[data-ink="purple"][data-theme="black"],:root[data-ink="purple"][data-theme="dark"],:root[data-ink="purple"][data-theme="chalk"],:root[data-ink="purple"][data-theme="midnight"]{--ink:#C9A8FF;--ink-soft:rgba(201,168,255,.15)}
+@media (prefers-color-scheme:dark){:root[data-ink="purple"]:not([data-paper]):not([data-theme="light"]){--ink:#C9A8FF;--ink-soft:rgba(201,168,255,.15)}}
+:root[data-ink="purple"][data-paper="black"],:root[data-ink="purple"]:not([data-paper])[data-theme="dark"],:root[data-ink="purple"][data-paper="chalk"],:root[data-ink="purple"][data-paper="midnight"]{--ink:#C9A8FF;--ink-soft:rgba(201,168,255,.15)}
 :root[data-ink="red"]{--ink:#A3241A;--ink-soft:rgba(163,36,26,.11)}
-@media (prefers-color-scheme:dark){:root[data-ink="red"]:not([data-theme="paper"]):not([data-theme="light"]){--ink:#FF9A8C;--ink-soft:rgba(255,154,140,.15)}}
-:root[data-ink="red"][data-theme="black"],:root[data-ink="red"][data-theme="dark"],:root[data-ink="red"][data-theme="chalk"],:root[data-ink="red"][data-theme="midnight"]{--ink:#FF9A8C;--ink-soft:rgba(255,154,140,.15)}
-:root[data-theme="legal"],:root[data-theme="mint"],:root[data-theme="blush"],:root[data-theme="sky"],:root[data-theme="kraft"]{color-scheme:light}
-:root[data-theme="legal"]{--page:#FBF1BE;--desk:#E6D78F;--rule:#A9C4DE;--margin:#E0877C}
-:root[data-theme="mint"]{--page:#E6F3EA;--desk:#C9DFD0;--rule:#B4CFE0;--margin:#E39A93}
-:root[data-theme="blush"]{--page:#FBE9E7;--desk:#EACFCB;--rule:#C9D3E8;--margin:#E08F86}
-:root[data-theme="sky"]{--page:#E7EFF8;--desk:#CBD9EA;--rule:#A9C0DD;--margin:#E39A93}
-:root[data-theme="kraft"]{--page:#DCC7A1;--desk:#BFA77C;--rule:#B7A57F;--margin:#B5534A;--pencil:#5A4E3A;--graphite:#241F17;--red:#8E1A12}
-:root[data-theme="kraft"][data-ink="green"]{--ink:#134A2C;--ink-soft:rgba(19,74,44,.12)}
-:root[data-theme="kraft"][data-ink="red"]{--ink:#7E1710;--ink-soft:rgba(126,23,16,.11)}
-:root[data-theme="chalk"]{--page:#1E3A2C;--desk:#12261C;--rule:#2C5140;--margin:#7C4038;--graphite:#EEF2EA;--pencil:#A9BDB1}
-:root[data-theme="midnight"]{--page:#131A30;--desk:#0A0F1E;--rule:#25304F;--margin:#5E2E3E;--graphite:#E8EAF2;--pencil:#9CA4BE}
+@media (prefers-color-scheme:dark){:root[data-ink="red"]:not([data-paper]):not([data-theme="light"]){--ink:#FF9A8C;--ink-soft:rgba(255,154,140,.15)}}
+:root[data-ink="red"][data-paper="black"],:root[data-ink="red"]:not([data-paper])[data-theme="dark"],:root[data-ink="red"][data-paper="chalk"],:root[data-ink="red"][data-paper="midnight"]{--ink:#FF9A8C;--ink-soft:rgba(255,154,140,.15)}
+:root[data-paper="legal"],:root[data-paper="mint"],:root[data-paper="blush"],:root[data-paper="sky"],:root[data-paper="kraft"]{color-scheme:light}
+:root[data-paper="legal"]{--page:#FBF1BE;--desk:#E6D78F;--rule:#A9C4DE;--margin:#E0877C}
+:root[data-paper="mint"]{--page:#E6F3EA;--desk:#C9DFD0;--rule:#B4CFE0;--margin:#E39A93}
+:root[data-paper="blush"]{--page:#FBE9E7;--desk:#EACFCB;--rule:#C9D3E8;--margin:#E08F86}
+:root[data-paper="sky"]{--page:#E7EFF8;--desk:#CBD9EA;--rule:#A9C0DD;--margin:#E39A93}
+:root[data-paper="kraft"]{--page:#DCC7A1;--desk:#BFA77C;--rule:#B7A57F;--margin:#B5534A;--pencil:#5A4E3A;--graphite:#241F17;--red:#8E1A12}
+:root[data-paper="kraft"][data-ink="green"]{--ink:#134A2C;--ink-soft:rgba(19,74,44,.12)}
+:root[data-paper="kraft"][data-ink="red"]{--ink:#7E1710;--ink-soft:rgba(126,23,16,.11)}
+:root[data-paper="chalk"]{--page:#1E3A2C;--desk:#12261C;--rule:#2C5140;--margin:#7C4038;--graphite:#EEF2EA;--pencil:#A9BDB1}
+:root[data-paper="midnight"]{--page:#131A30;--desk:#0A0F1E;--rule:#25304F;--margin:#5E2E3E;--graphite:#E8EAF2;--pencil:#9CA4BE}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html{font-size:16px}
 body{margin:0;background:var(--desk);color:var(--graphite);font-family:var(--print);line-height:var(--lh);min-height:100dvh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
@@ -404,14 +404,15 @@ function load(k,d){try{var v=JSON.parse(localStorage.getItem(k));return v==null?
 function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
 
 var ui=load('jn_ui',{theme:'paper',fs:1,ink:'blue'});
-if(!ui.v2){ui.v2=1;if(ui.theme==='auto')ui.theme='paper'}
+ui.v2=1;if(!ui.theme||ui.theme==='auto')ui.theme='paper';   // no "match phone": the paper is always the user's pick, white by default
 var setup=load('jn_setup',{name:'',size:5,level:'medium',timer:0});
 var scHidden=false,game=null,me=null,snap=null,sel=null,sheet=null,chatSeen=0,turnDeadline=null,errMsg='',popT=null;
 var anim={trick:{},made:{},calls:{},circled:'',rows:{}},firstHome=true;
 
 function applyUI(){
   var h=document.documentElement;
-  if(ui.theme==='auto')h.removeAttribute('data-theme');else h.dataset.theme=ui.theme;
+  // the paper lives on data-paper; data-theme belongs to the page hosting the app and is only read in "match phone" mode
+  h.dataset.paper=ui.theme||'paper';
   if(!ui.ink||ui.ink==='blue')h.removeAttribute('data-ink');else h.dataset.ink=ui.ink;
   h.style.fontSize=FS[ui.fs]+'px';
   var bg=getComputedStyle(h).getPropertyValue('--page').trim(),m=document.querySelector('meta[name=theme-color]');
@@ -796,7 +797,7 @@ function playersHTML(s,isHost){
   return h;
 }
 function lookHTML(){
-  var papers=[['paper','White','#F4F0E4'],['legal','Legal pad','#FBF1BE'],['mint','Mint','#E6F3EA'],['blush','Blush','#FBE9E7'],['sky','Sky','#E7EFF8'],['kraft','Kraft','#DCC7A1'],['black','Black','#18181B'],['chalk','Chalkboard','#1E3A2C'],['midnight','Midnight','#131A30'],['auto','Match phone','linear-gradient(90deg,#F4F0E4 50%,#18181B 50%)']];
+  var papers=[['paper','White','#F4F0E4'],['legal','Legal pad','#FBF1BE'],['mint','Mint','#E6F3EA'],['blush','Blush','#FBE9E7'],['sky','Sky','#E7EFF8'],['kraft','Kraft','#DCC7A1'],['black','Black','#18181B'],['chalk','Chalkboard','#1E3A2C'],['midnight','Midnight','#131A30']];
   return '<h3>Paper</h3><div class="chips">'+papers.map(function(x){return '<button class="chip'+(ui.theme===x[0]?' on':'')+'" data-a="theme" data-v="'+x[0]+'" aria-pressed="'+(ui.theme===x[0])+'"><span class="swatch paper" style="background:'+x[2]+'"></span>'+x[1]+'</button>'}).join('')+'</div>'
    +'<h3>Ink colour</h3><div class="chips">'+[['blue','Blue','#1F3A9A'],['black','Black','#1E1E22'],['green','Green','#1D6A43'],['purple','Purple','#5A2A98'],['red','Red','#A3241A']].map(function(x){return '<button class="chip'+((ui.ink||'blue')===x[0]?' on':'')+'" data-a="ink" data-v="'+x[0]+'"><span class="swatch" style="background:'+x[2]+'"></span>'+x[1]+'</button>'}).join('')+'</div>'
    +'<h3>Text size</h3><div class="chips">'+FSN.map(function(n,i){return '<button class="chip'+(ui.fs===i?' on':'')+'" data-a="fs" data-v="'+i+'">'+n+'</button>'}).join('')+'</div>';
@@ -970,7 +971,7 @@ function playbarHTML(){
   var s=snap;
   if(!(s.phase==='playing'&&s.turn===s.me&&s.legal&&s.legal.length))return '';
   return '<div class="playbar">'+(sel?'<button class="btn pri wide" data-a="submit">Play '+rankL(sel)+' <span class="sy'+(isRed(sel[0])?' r':'')+'">'+SY[sel[0]]+'</span></button>'
-    :'<button class="btn wide" disabled>Pick a card, then press Play</button>')+'</div>';
+    :'<button class="btn wide" disabled>Pick a card to play</button>')+'</div>';
 }
 function renderGame(){
   var s=snap,app=$('#app');
@@ -994,6 +995,8 @@ function buzz(s){
   if(mine)key='t'+s.round.i+':'+s.phase+':'+s.hand.length;
   else if(s.phase==='trickdone'&&s.trickWinner===s.me)key='w'+s.round.i+':'+s.hand.length;
   if(!key||key===lastBuzz)return;lastBuzz=key;
+  // browsers refuse vibration until the person has tapped the page once
+  var ua=navigator.userActivation;if(ua&&!ua.hasBeenActive)return;
   try{if(navigator.vibrate)navigator.vibrate(key[0]==='t'?[18]:[12,60,12])}catch(x){}
 }
 /* ---------- sheets ---------- */
@@ -1212,6 +1215,7 @@ var lastW=innerWidth;
 function typing(){var a=document.activeElement;return !!a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA')}
 addEventListener('resize',function(){clearTimeout(rsT);rsT=setTimeout(function(){
   var widthChanged=innerWidth!==lastW;lastW=innerWidth;
+  if(snap&&$('#tbl'))fillTable();   // the table holds no text boxes, so it can always re-fit
   if(!widthChanged&&typing())return;
   if(snap)render();else{var nm=$('#nm'),v=nm&&nm.value,rc=$('#rc'),rv=rc&&rc.value;homeFw=null;renderHome();if(v!=null&&$('#nm'))$('#nm').value=v;if(rv!=null&&$('#rc'))$('#rc').value=rv}
 },120)});

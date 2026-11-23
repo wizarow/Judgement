@@ -49,7 +49,7 @@ Don't redeploy mid-game: live rooms are held in memory and drop on restart. The 
 
 ## Settings (one panel, sliders icon)
 Players (host removes, with confirm), bots (lobby only), bot difficulty, turn timer,
-paper (white by default; legal pad, mint, blush, sky, kraft, black, chalkboard, midnight, or match phone),
+paper (white by default; legal pad, mint, blush, sky, kraft, black, chalkboard, midnight; the phone's dark mode doesn't change it),
 ink colour (blue, black, green, purple, red), text size, your name, connection status, how to play, and Leave last.
 
 ## Notes
