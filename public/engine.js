@@ -504,7 +504,7 @@
     this.schedKey = key; this.turnEnd = null;
     var delay, timed = false;
     if (cur.bot) delay = this.fast ? 1 : 600 + rnd(500);
-    else if (!cur.connected) delay = this.fast ? 1 : (this.autoMs || 90000);
+    else if (!cur.connected) delay = this.fast ? 1 : (this.autoMs || 25000);
     else if (this.timerSec) { delay = this.timerSec * 1000 * this.timerScale; timed = true; }
     else return;
     if (timed) this.turnEnd = Date.now() + delay;
@@ -571,4 +571,3 @@
     newDeck: newDeck, shuffle: shuffle, cleanName: cleanName
   };
 });
-
