@@ -3,6 +3,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const zlib = require('zlib');
 const { Game } = require('./public/engine.js');
 
 const PORT = process.env.PORT || 3000;
@@ -64,13 +65,46 @@ function readBody(req) {
 }
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8' };
+
+// The two page files are compressed once (Brotli and gzip) and kept in memory, and sent with an ETag so a phone that
+// already has the current version gets a tiny 304 instead of the whole file. Only these static files are touched:
+// the live stream (/api/stream) and the JSON API are never compressed or cached.
+const staticCache = new Map();   // file -> { mtimeMs, raw, gz, br, etag, type }
+function loadStatic(f, cb) {
+  const p = path.join(PUB, f);
+  fs.stat(p, (err, st) => {
+    if (err) return cb(err);
+    const hit = staticCache.get(f);
+    if (hit && hit.mtimeMs === st.mtimeMs) return cb(null, hit);
+    fs.readFile(p, (err2, buf) => {
+      if (err2) return cb(err2);
+      const e = {
+        mtimeMs: st.mtimeMs, raw: buf, type: MIME[path.extname(f)],
+        etag: crypto.createHash('sha1').update(buf).digest('hex').slice(0, 16),
+        gz: zlib.gzipSync(buf, { level: 9 }),
+        br: zlib.brotliCompressSync(buf, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 9 } })
+      };
+      staticCache.set(f, e);
+      cb(null, e);
+    });
+  });
+}
 function serveStatic(req, res, url) {
   let f = url.pathname === '/' ? '/index.html' : url.pathname;
   if (f !== '/index.html' && f !== '/engine.js') { res.writeHead(404); return res.end('Not found'); }
-  fs.readFile(path.join(PUB, f), (err, buf) => {
+  loadStatic(f, (err, e) => {
     if (err) { res.writeHead(404); return res.end('Not found'); }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(f)], 'Cache-Control': 'no-cache' });
-    res.end(buf);
+    const ae = String(req.headers['accept-encoding'] || '');
+    const enc = /\bbr\b/.test(ae) ? 'br' : /\bgzip\b/.test(ae) ? 'gzip' : '';
+    const body = enc === 'br' ? e.br : enc === 'gzip' ? e.gz : e.raw;
+    const etag = '"' + e.etag + (enc ? '-' + enc : '') + '"';
+    const headers = { 'Content-Type': e.type, 'Cache-Control': 'no-cache', 'ETag': etag, 'Vary': 'Accept-Encoding' };
+    const inm = String(req.headers['if-none-match'] || '');
+    if (inm && inm.split(',').some(t => t.trim().replace(/^W\//, '') === etag)) { res.writeHead(304, headers); return res.end(); }
+    if (enc) headers['Content-Encoding'] = enc;
+    headers['Content-Length'] = body.length;
+    res.writeHead(200, headers);
+    res.end(body);
   });
 }
 
@@ -181,4 +215,7 @@ setInterval(() => {
   });
 }, 10 * 60 * 1000);
 
-server.listen(PORT, () => console.log('Judgement listening on ' + PORT));
+server.listen(PORT, () => {
+  console.log('Judgement listening on ' + PORT);
+  ['/index.html', '/engine.js'].forEach(f => loadStatic(f, () => {}));   // compress ahead of the first visitor
+});

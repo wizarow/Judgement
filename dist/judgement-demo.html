@@ -114,7 +114,7 @@ html[data-screen="scroll"] .table{min-height:11rem}
 .chips{display:flex;flex-wrap:wrap;gap:.35rem}
 .chip{min-height:2.25rem;min-width:2.5rem;padding:0 .8rem;font-family:var(--hand);font-size:1.05rem;color:var(--ink);
   border:1.5px solid transparent;border-radius:255px 14px 225px 14px/14px 225px 14px 255px}
-.chip:hover{border-color:var(--ink-soft)}
+@media (hover:hover) and (pointer:fine){.chip:hover{border-color:var(--ink-soft)}}
 .chip.on{border-color:var(--ink);background:var(--ink-soft);font-weight:700}
 
 /* home */
@@ -268,7 +268,7 @@ html[data-screen="scroll"] .table{min-height:11rem}
 .pad .q{font-family:var(--hand);font-size:1.2rem;font-weight:700;color:var(--ink);line-height:var(--lh)}
 .nums{display:grid;grid-template-columns:repeat(auto-fill,minmax(2.75rem,1fr));gap:.2rem .25rem;margin:.15rem 0 .1rem}
 .num{position:relative;height:2.75rem;font-family:var(--hand);font-size:1.45rem;font-weight:700;color:var(--ink);border-radius:50%}
-.num:hover{background:var(--ink-soft)}
+@media (hover:hover) and (pointer:fine){.num:hover{background:var(--ink-soft)}}
 .num:active{transform:scale(.94)}
 .num .sug{position:absolute;inset:3px;color:var(--pencil);pointer-events:none;overflow:visible}
 .num.no{color:var(--pencil);cursor:not-allowed}
@@ -337,9 +337,14 @@ html[data-screen="scroll"] .table{min-height:11rem}
 .sumline .miss{color:var(--red)}
 .deal{flex:none;margin-top:.4rem;padding-bottom:calc(.6rem + env(safe-area-inset-bottom))}
 .insc{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;animation:fade .3s ease-out both}
-.insc h2{flex:none;margin:0;height:calc(var(--lh)*1.5);display:flex;align-items:center;gap:.5rem;font-size:1.6rem;font-weight:700}
+.insc h2{flex:none;margin:0;min-height:calc(var(--lh)*1.5);display:flex;align-items:center;gap:.5rem;font-size:1.6rem;font-weight:700}
 .insc h2 .pr{font-family:var(--print);font-weight:400}
 .btn.sm{min-height:2.2rem;padding:.1rem .8rem;font-size:1rem}
+/* Touch behaviour: taps are instant (no double-tap zoom), controls do not get selected on long-press (chat text stays selectable),
+   and small buttons reach a thumb-sized target on touch screens. The hand's own touch-action:none (more specific) is kept. */
+button,a,[role="button"],.chip,.num{touch-action:manipulation}
+button,[role="button"]{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+@media (pointer:coarse){.btn.sm,.chip{min-height:2.75rem}}
 
 /* chat */
 .msgs{display:flex;flex-direction:column;min-height:calc(var(--lh)*6);max-height:calc(var(--appH)*.44);overflow:auto;margin:.2rem 0 .4rem}
@@ -1015,6 +1020,15 @@ function applyUI(){
   if(m&&bg)m.setAttribute('content',bg);
   save('jn_ui',ui);
 }
+function canShare(){try{return !!navigator.share&&matchMedia('(pointer:coarse)').matches}catch(e){return false}}
+function copyInvite(link){try{navigator.clipboard.writeText(link).then(function(){toast('Invite link copied')},function(){toast(link)})}catch(x){toast(link)}}
+// Opens the phone's own share menu (WhatsApp, Messages...) with the invite filled in; copies the link where sharing is not available.
+function shareInvite(){
+  if(isLocal){toast('Demo room: in the live app this shares an invite link');return}
+  var link=location.origin+location.pathname+'?room='+snap.code;
+  if(canShare()){navigator.share({title:'Judgement',text:'Join my Judgement table. Room code '+snap.code,url:link}).catch(function(e){if(!e||e.name!=='AbortError')copyInvite(link)});return}
+  copyInvite(link);
+}
 function toast(t){var el=$('#toast');el.innerHTML='<div class="toast" role="status">'+esc(t)+'</div>';clearTimeout(toast.t);toast.t=setTimeout(function(){el.innerHTML=''},2400)}
 
 /* ---------- pen marks ---------- */
@@ -1363,8 +1377,8 @@ function renderLobby(){
   var s=snap,isHost=s.host===s.me,total=s.n,bots=s.botCount,hum=s.players.length;
   var h=VLINE+'<header class="hd"><div class="rd"><div class="ink">Room '+esc(s.code)+'</div><span class="pr">'+(isHost?'You are the host':'Hosted by '+esc(nameOf(s.host)))+'</span></div><span></span>'
    +'<div class="tools"><span id="conn" class="pr red conn" hidden></span><button class="ib" data-a="settings" aria-label="Settings">'+ICON.gear+'</button></div></header>'
-   +'<div class="lobby"><div class="invite"><span class="pr">Friends join with this code</span><button class="code big" data-a="copy" aria-label="Copy invite link">'+esc(s.code)+'</button>'
-   +'<span class="pr">'+(DEMO&&isHost?'Demo: friends join by themselves over the next few seconds.':'Tap the code to copy an invite link for more friends.')+'</span></div>'
+   +'<div class="lobby"><div class="invite"><span class="pr">Friends join with this code</span><button class="code big" data-a="copy" aria-label="Share invite link">'+esc(s.code)+'</button>'
+   +'<span class="pr">'+(DEMO&&isHost?'Demo: friends join by themselves over the next few seconds.':(canShare()?'Tap the code to share an invite with friends.':'Tap the code to copy an invite link for friends.'))+'</span></div>'
    +'<div class="lh pr" style="grid-template-columns:1fr auto"><span>Who’s here</span><span>'+hum+' joined · '+(bots?bots+' bot seat'+(bots>1?'s':''):'no bots')+' · '+total+' players</span></div>';
   s.players.forEach(function(p){
     var fresh=!seenJoin[s.code+':'+p.id]&&Object.keys(seenJoin).length>0;
@@ -1654,7 +1668,21 @@ function roundSummary(){
   var mine=x.made===x.call?'You made your '+x.call+': <b>+'+x.pts+'</b>.':'<span class="miss">You called '+x.call+' and made '+x.made+': nothing this round.</span>';
   return '<div class="sumline">'+mine+' '+(made.length?'Made it: '+esc(made.join(', '))+'.':'Nobody made their call!')+'</div>';
 }
+// Back button / back swipe closes the open panel (Settings, chat, Screen, rules) before it leaves the page.
+// One history entry is added while a panel is open and removed when it closes, so Back never loops.
+var sheetPushed=false,ignorePop=false;
+function syncHistory(){
+  try{
+    if(sheet&&!sheetPushed){history.pushState({jn:1},'');sheetPushed=true}
+    else if(!sheet&&sheetPushed){sheetPushed=false;ignorePop=true;setTimeout(function(){ignorePop=false},700);history.back()}
+  }catch(e){sheetPushed=false;ignorePop=false}
+}
+addEventListener('popstate',function(){
+  if(ignorePop){ignorePop=false;return}
+  if(sheetPushed){sheetPushed=false;if(sheet){sheet=null;render()}}
+});
 function renderSheet(){
+  syncHistory();
   var el=$('#sheet'),s=snap;
   var auto=false;
   if(!sheet&&!auto){el.innerHTML='';return}
@@ -1774,7 +1802,7 @@ document.addEventListener('click',function(e){
     case 'join':join();break;
     case 'lstart':act({type:'start'});break;
     case 'lsize':act({type:'size',size:snap.n+(+t.dataset.d)});setTimeout(renderSheet,60);break;
-    case 'copy':{if(isLocal){toast('Demo room: in the live app this copies an invite link');break}var link=location.origin+location.pathname+'?room='+snap.code;try{navigator.clipboard.writeText(link).then(function(){toast('Invite link copied')},function(){toast(link)})}catch(x){toast(link)}break}
+    case 'copy':shareInvite();break;
     case 'kickask':pendingKick=+t.dataset.p;render();break;
     case 'kickno':pendingKick=null;render();break;
     case 'kickyes':act({type:'kick',pid:+t.dataset.p});pendingKick=null;render();toast('Player removed');break;

@@ -16,7 +16,7 @@ v2 · Ishan Atul's render
 Don't redeploy mid-game: live rooms are held in memory and drop on restart. The free plan sleeps when idle.
 
 ## Files
-- `server.js`        rooms, live updates (server-sent events), static files
+- `server.js`        rooms, live updates (server-sent events), static files (Brotli/gzip compressed once, with ETag so unchanged files cost a 304)
 - `public/engine.js` all the rules and the bots; shared by server and browser
 - `public/index.html` the whole UI (v2 notebook design)
 - `docs/DESIGN.md`, `docs/PRODUCT.md`  design system and product notes
@@ -53,6 +53,12 @@ paper (white by default; legal pad, mint, blush, sky, kraft, black, chalkboard, 
 ink colour (blue, black, green, purple, red), text size, game screen (Fit to screen / Scrolling), your name, connection status, how to play, and Leave last.
 
 ## Notes
+- Page load: `index.html` + `engine.js` are about 117 KB raw and about 34 KB with Brotli (about 0 KB when the phone already has the current version).
+  Only these two files are compressed or cached; the live stream and the JSON API are untouched.
+- Touch: hover highlights only on devices with a mouse (no stuck highlight after a tap), buttons use instant taps with no double-tap zoom,
+  buttons are not selectable on long-press (chat text still is), and small buttons and chips are 44 px tall on touch screens.
+- Invite: tapping the room code opens the phone's share menu (WhatsApp, Messages...) with the room code and link; it copies the link on devices without sharing.
+- Back button / back swipe closes the open panel (Settings, chat, Screen, rules) before it leaves the page.
 - Small or short screens (large phone text, landscape, 6-8 players): the game screen never cuts anything off. If it does not fit it scrolls,
   and the tray with the calling numbers, status line and your hand stays pinned to the bottom. In landscape the table and players
   are on the left and the tray on the right. If a browser reports the wrong window height and the tray would end up below the visible edge,
