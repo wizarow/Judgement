@@ -279,9 +279,9 @@ const humanOf = (g, tok) => g.players.filter(p => p.token === tok)[0];
     g.destroy();
   }
   {
-    // every hand is held 6 s on the table in live rooms
+    // every hand is held 4 s on the table in live rooms
     const live = new Game('X', {});
-    assert.strictEqual(live.handHoldMs, 6000);
+    assert.strictEqual(live.handHoldMs, 4000);
     live.destroy();
   }
   {

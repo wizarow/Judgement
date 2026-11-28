@@ -644,7 +644,7 @@ button,[role="button"]{user-select:none;-webkit-user-select:none;-webkit-touch-c
     opts = opts || {};
     this.code = code;
     this.fast = !!opts.fast;
-    this.handHoldMs = opts.handHoldMs || (this.fast ? 1 : 6000);   // after every hand the table stays this long before play moves on
+    this.handHoldMs = opts.handHoldMs || (this.fast ? 1 : 4000);   // after every hand the table stays this long before play moves on
     this.againDelayMs = opts.againDelayMs != null ? opts.againDelayMs : (this.fast ? 0 : 30000);   // final scores stay up this long before the next game
     this.overAt = null;         // when the game ended
     this.roundTricks = [];      // every hand of the round under way: { trick: [{ pid, card }], winner }
@@ -1116,7 +1116,7 @@ button,[role="button"]{user-select:none;-webkit-user-select:none;-webkit-touch-c
     this.turnIdx = this.players.indexOf(w);
     this.emit();
     var self = this;
-    // Every hand: once everyone has played, the table stays for handHoldMs (6 s) so the cards can be read, then play
+    // Every hand: once everyone has played, the table stays for handHoldMs (4 s) so the cards can be read, then play
     // moves on (the next hand, or the Screen after the round's last hand).
     clearTimeout(this.ttimer);
     this.ttimer = setTimeout(function () { self.afterTrick(); }, this.handHoldMs);

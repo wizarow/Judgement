@@ -143,7 +143,7 @@ function play(nHumans, size) {
     }, 700);
   });
 
-  // table is held ~4 s after the last hand of a round (1.6 s between ordinary hands)
+  // every hand is held 4 s once everyone has played (the last hand of a round too)
   {
     const delays = [];
     const realST = global.setTimeout;
@@ -165,7 +165,7 @@ function play(nHumans, size) {
     assert.strictEqual(h.phase, 'roundover');
     const hands = h.round.cards;
     assert.strictEqual(delays.length, hands, 'one pause per hand');
-    assert(delays.every(d => d === 6000), 'every hand is held 6 s, the last one too');
+    assert(delays.every(d => d === 4000), 'every hand is held 4 s, the last one too');
     h.destroy();
   }
 
