@@ -391,14 +391,6 @@ button,[role="button"]{user-select:none;-webkit-user-select:none;-webkit-touch-c
 .hw-c{display:flex;flex-direction:column;align-items:center;min-width:0}
 .hw-n{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--hand);font-size:.7rem;line-height:1.2;color:var(--graphite);margin-top:.15rem}
 .card.won{border-color:var(--ink);box-shadow:0 0 0 2px var(--ink),var(--shadow);z-index:2}
-.lastr{flex:1 1 auto;min-height:0;overflow:auto;padding:.2rem 0 .6rem}
-.lastr .lr-t{font-size:1.25rem;font-weight:700;line-height:var(--lh)}
-.lastr .sy{font-family:var(--print)}
-.lastr .sy.r{color:var(--red)}
-.lastr .slots{margin:calc(var(--lh)*1.2) auto 0}
-.lastr .lrr{font-size:.78rem;margin-top:-.1rem;text-align:center}
-.lastr .lrr.ok{color:var(--ink);font-weight:600}
-.lastr .lrr.miss{color:var(--red)}
 /* game over: Play again on its own row, Leave and Game setup below it */
 .over.btns.eg{flex-wrap:wrap}
 .over.btns.eg .btn{flex:1 1 0;white-space:nowrap}
@@ -472,7 +464,7 @@ ui.v2=1;if(!ui.theme||ui.theme==='auto')ui.theme='paper';   // no "match phone":
 var setup=load('jn_setup',{name:'',size:5,level:'medium',timer:0});
 var scHidden=false,game=null,me=null,snap=null,sel=null,sheet=null,chatSeen=0,turnDeadline=null,errMsg='',popT=null;
 var anim={trick:{},made:{},calls:{},circled:'',rows:{}},firstHome=true;
-// joinOffer: a started game's code was typed (watch it, or take a seat back). screenTab: Scores, Hands won or Last round on the Screen.
+// joinOffer: a started game's code was typed (watch it, or take a seat back). screenTab: Scores or Hands won on the Screen.
 // handover: someone leaving (or being removed) picks who takes the seat. seatPick: the voyeur the host is giving a seat to.
 var joinOffer=null,screenTab='scores',handover=null,seatPick=null,againDeadline=null;
 
@@ -1210,24 +1202,16 @@ function screenHTML(full){
   s.players.forEach(function(p){h+='<td>'+p.score+'</td>'});
   return h+'</tr></tfoot></table></div>';
 }
-// Scores | Hands won | Last round, above the Screen.
+// Scores | Hands won, above the Screen.
 // Hands won: every hand the player has taken, round by round, newest first (a voyeur gets it for the player whose hand
-// they may see; without that it is greyed out). Last round: the final hand of the last finished round, open until 45 s
-// into the next round, then locked (the game stops sending it).
-function effTab(){
-  if(screenTab==='hands'&&Array.isArray(snap.wins))return 'hands';
-  if(screenTab==='last'&&snap.lastRound)return 'last';
-  return 'scores';
-}
+// they may see; without that it is greyed out).
 function screenTabsHTML(){
-  var t=effTab(),hasW=Array.isArray(snap.wins),hasL=!!snap.lastRound;
-  function tab(k,label,on,title){return '<button class="chip'+(t===k?' on':'')+'" role="tab" '+(on?'data-a="stab" data-v="'+k+'"':'disabled title="'+title+'"')+' aria-selected="'+(t===k)+'">'+label+'</button>'}
+  var has=Array.isArray(snap.wins),hw=screenTab==='hands'&&has;
   return '<div class="chips tabs" role="tablist" aria-label="Screen view">'
-   +tab('scores','Scores',true,'')
-   +tab('hands','Hands won',hasW,'Ask to see a player’s hand to see their hands won')
-   +tab('last','Last round',hasL,snap.history.length?'Locked: it closes 45 seconds into the next round':'There is no earlier round yet')+'</div>';
+   +'<button class="chip'+(hw?'':' on')+'" role="tab" data-a="stab" data-v="scores" aria-selected="'+(!hw)+'">Scores</button>'
+   +'<button class="chip'+(hw?' on':'')+'" role="tab" '+(has?'data-a="stab" data-v="hands"':'disabled title="Ask to see a player’s hand to see their hands won"')+' aria-selected="'+hw+'">Hands won</button></div>';
 }
-function screenBodyHTML(){var t=effTab();return t==='hands'?handsWonHTML():t==='last'?lastRoundHTML():screenHTML()}
+function screenBodyHTML(){return screenTab==='hands'&&Array.isArray(snap.wins)?handsWonHTML():screenHTML()}
 function handsWonHTML(){
   var s=snap,rounds=s.wins.slice().sort(function(a,b){return b.i-a.i}),n=s.players.length,W=Math.min(innerWidth,480)-56;
   var tw=Math.max(24,Math.min(44,Math.floor(W/n)-6)),th=Math.round(tw*1.4);
@@ -1249,23 +1233,6 @@ function handsWonHTML(){
     h+='</section>';
   });
   return h+'</div>';
-}
-function lastRoundHTML(){
-  var s=snap,lr=s.lastRound,n=lr.trick.length,per=n>4?Math.ceil(n/2):n,W=Math.min(innerWidth,480)-56;
-  var tw=Math.max(34,Math.min(70,Math.floor(W/per)-12)),th=Math.round(tw*1.4),cut=lr.cut;
-  var h='<div class="lastr"><div class="lr-t ink">Round '+(lr.i+1)+' · the final hand</div>'
-   +'<div class="pr">'+(cut?'<span class="sy'+(isRed(cut)?' r':'')+'">'+SY[cut]+'</span> '+SN[cut]+' cut':'No cut that round')+' · '+(lr.winner===s.me?'You take':esc(nameOf(lr.winner))+' takes')+' it</div>'
-   +'<div class="slots" style="width:'+Math.min(W,per*(tw+12))+'px">';
-  lr.trick.forEach(function(t,i){
-    var res=lr.res[t.pid]||{call:0,made:0,pts:0},win=lr.winner===t.pid,hit=res.made===res.call,tag='';
-    if(i===0)tag='<span class="tg">led</span>';
-    else if(cut&&lr.led&&cut!==lr.led&&t.card[0]===cut)tag='<span class="tg cut">cut!</span>';
-    h+='<div class="slot'+(win?' win':'')+(t.pid===s.me?' me':'')+'" style="width:'+(tw+12)+'px">'+tag
-      +cardHTML(t.card,{w:tw,h:th,r:rotOf(t.card)})
-      +(win?'<svg class="circ pen" style="left:-2px;top:-10px;width:'+(tw+16)+'px;height:'+(th+20)+'px" viewBox="0 0 '+(tw+16)+' '+(th+20)+'" preserveAspectRatio="none" aria-hidden="true"><path pathLength="1" style="stroke-width:2.4" d="'+loopPath(tw+16,th+20,hash(t.card))+'"/></svg>':'')
-      +'<div class="sn">'+esc(nameOf(t.pid))+'</div><div class="pr lrr '+(hit?'ok':'miss')+'">'+res.made+' of '+res.call+(hit?' · +'+res.pts:'')+'</div></div>';
-  });
-  return h+'</div><p class="pr" style="text-align:center;margin-top:calc(var(--lh)*.6)">Open until 45 seconds into the next round.</p></div>';
 }
 function roundSummary(){
   var s=snap,last=s.history[s.history.length-1],x=last.res[s.me];
@@ -1475,7 +1442,7 @@ document.addEventListener('click',function(e){
     case 'watch':watchRoom();break;
     case 'offerpeek':if(joinOffer){joinOffer.peek=v===''?null:+v;render()}break;
     case 'offerno':joinOffer=null;render();break;
-    case 'stab':screenTab=(v==='hands')?'hands':(v==='last')?'last':'scores';render();break;
+    case 'stab':screenTab=(v==='hands')?'hands':'scores';render();break;
     case 'peeksheet':sheet='peek';renderSheet();break;
     case 'peek':act({type:'peek',pid:v===''?null:+v});sheet=null;render();break;
     case 'peekyes':act({type:'peekreply',vid:+v,ok:true});break;

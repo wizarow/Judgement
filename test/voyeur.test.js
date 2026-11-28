@@ -279,39 +279,9 @@ const humanOf = (g, tok) => g.players.filter(p => p.token === tok)[0];
     g.destroy();
   }
   {
-    // the Last round tab: the final hand of the last finished round, open until 45 s into the next round, then not sent at all
-    const g = started(1, 3);
-    g.lastRoundMs = 400;
-    assert.strictEqual(g.snapshot(1).lastRound, null, 'nothing before the first round ends');
-    await until(g, () => g.phase === 'roundover', 'end of round 1');
-    let lr = g.snapshot(1).lastRound;
-    assert(lr, 'open once the round has ended');
-    assert.strictEqual(lr.i, 0); assert.strictEqual(lr.trick.length, 3, 'one card per player');
-    assert.deepStrictEqual(lr.trick, g.history[0].tricks[g.history[0].tricks.length - 1].trick, 'it is the final hand');
-    assert(lr.trick.some(t => t.pid === lr.winner));
-    assert.strictEqual(lr.led, lr.trick[0].card[0]);
-    assert(lr.res[1] && 'call' in lr.res[1], 'with the round result per player');
-    await sleep(500);
-    assert(g.snapshot(1).lastRound, 'the window starts when the next round does, not before');
-    const seq0 = g.seq;
-    g.act(1, { type: 'next' });
-    assert(g.snapshot(1).lastRound, 'still open at the start of the next round');
-    assert.strictEqual(g.snapshot(1).lastRound.i, 0);
-    await sleep(480);
-    assert.strictEqual(g.snapshot(1).lastRound, null, 'locked: it is no longer sent');
-    assert(g.seq > seq0 + 1, 'an update went out when it locked');
-    // a voyeur is held to the same lock
-    const v = g.addVoyeur('Vee', 'tv').pid;
-    assert.strictEqual(g.snapshot(v).lastRound, null);
-    await until(g, () => g.phase === 'roundover', 'end of round 2');
-    assert.strictEqual(g.snapshot(v).lastRound.i, 1, 'the new last round opens when round 2 ends');
-    assert.strictEqual(g.snapshot(1).lastRound.i, 1);
-    g.destroy();
-  }
-  {
-    // the default window is 45 s, and the last hand of a round is held 4 s
+    // every hand is held 6 s on the table in live rooms
     const live = new Game('X', {});
-    assert.strictEqual(live.lastRoundMs, 45000); assert.strictEqual(live.lastHoldMs, 4000);
+    assert.strictEqual(live.handHoldMs, 6000);
     live.destroy();
   }
   {
@@ -429,6 +399,6 @@ const humanOf = (g, tok) => g.players.filter(p => p.token === tok)[0];
     g.destroy();
   }
 
-  console.log('ok   voyeurs: join, hand approval, handover, seat, take-back, away to bot, hands won, Last round lock, Play again, Game setup, the wait');
+  console.log('ok   voyeurs: join, hand approval, handover, seat, take-back, away to bot, hands won, Play again, Game setup, the wait');
   process.exit(0);
 })().catch(e => { console.error('FAIL', e); process.exit(1); });

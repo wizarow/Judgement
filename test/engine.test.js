@@ -165,8 +165,7 @@ function play(nHumans, size) {
     assert.strictEqual(h.phase, 'roundover');
     const hands = h.round.cards;
     assert.strictEqual(delays.length, hands, 'one pause per hand');
-    assert(delays.slice(0, hands - 1).every(d => d === 1600), 'ordinary hands 1.6 s');
-    assert.strictEqual(delays[hands - 1], 4000, 'last hand held 4 s');
+    assert(delays.every(d => d === 6000), 'every hand is held 6 s, the last one too');
     h.destroy();
   }
 

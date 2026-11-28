@@ -41,10 +41,9 @@ function resolve(g, token) {
 function makeRoom() {
   const code = newCode();
   if (!code) return null;
-  // JD_FAST / JD_LAST_ROUND_MS / JD_AGAIN_MS (ms) only exist so tests can run quickly; live rooms use the real timings
+  // JD_FAST / JD_AGAIN_MS (ms) only exist so tests can run quickly; live rooms use the real timings
   const g = new Game(code, {
     fast: process.env.JD_FAST === '1',
-    lastRoundMs: +process.env.JD_LAST_ROUND_MS || 0,
     againDelayMs: process.env.JD_AGAIN_MS != null && process.env.JD_AGAIN_MS !== '' ? +process.env.JD_AGAIN_MS : undefined
   });
   g.onChange = () => broadcast(code);

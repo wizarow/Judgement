@@ -1,7 +1,7 @@
-"""Browser tests for voyeurs, Hands won, Last round (and its lock), the game-end buttons and the chat chips.
+"""Browser tests for voyeurs, Hands won, the game-end buttons and the chat chips.
 
 Run with the server in fast mode (bots move instantly), through the webapp-testing skill's helper, from the repo folder:
-    JD_FAST=1 JD_LAST_ROUND_MS=2500 JD_AGAIN_MS=3000 python <skill>/scripts/with_server.py --server "node server.js" --port 3000 -- python test/voyeur_ui.py
+    JD_FAST=1 JD_AGAIN_MS=3000 python <skill>/scripts/with_server.py --server "node server.js" --port 3000 -- python test/voyeur_ui.py
 """
 import re
 import sys
@@ -217,7 +217,7 @@ def play_round(page):
 
 
 @scenario
-def s_hands_won_and_last_round(browser):
+def s_hands_won(browser):
     ca, a, code = new_room(browser)
     wa = Watch(a, "host")
     start_game(a)
@@ -234,28 +234,25 @@ def s_hands_won_and_last_round(browser):
     a.wait_for_selector("#ask .ask")
     a.locator("[data-a=peekyes]").first.click()
     b.wait_for_function("window.__jn.snap.peek && window.__jn.snap.peek.state==='ok'", timeout=5000)
-    # three tabs; Hands won is there from the start, Last round needs a finished round
+    # two tabs; Hands won is there from the start
     a.locator("[data-a=screen]").first.click()
     a.wait_for_selector("[aria-label='The Screen'] .tabs")
     tabs = a.locator("[aria-label='The Screen'] .tabs .chip")
-    check("tabs: Scores, Hands won, Last round", tabs.all_inner_texts() == ["Scores", "Hands won", "Last round"], str(tabs.all_inner_texts()))
+    check("tabs: Scores and Hands won (no Last round)", tabs.all_inner_texts() == ["Scores", "Hands won"], str(tabs.all_inner_texts()))
     check("tabs: Hands won is available in round 1", tabs.nth(1).is_enabled())
-    check("tabs: Last round is greyed out in round 1 (no earlier round)", tabs.nth(2).is_disabled())
     tabs.nth(1).click()
     a.wait_for_selector(".hwon")
     txt = a.locator(".hwon").inner_text()
     check("hands won: round 1 listed with no hands yet", "Round 1" in txt and "No hands won" in txt, txt[:120].replace("\n", " "))
     a.locator("[aria-label='The Screen'] [data-a=close]").first.click()
-    # play round 1: the table holds the last hand as it always did (no stacks of every hand)
+    # play round 1
     ok = play_round(a)
     check("round 1 reaches the Screen", ok)
-    check("table: no all-hands recap any more", a.locator(".recap").count() == 0)
     # Hands won, from the Screen between rounds
     s = snap(a)
     me = [p for p in s["players"] if p["id"] == s["me"]][0]
     tabs = a.locator(".insc .tabs .chip")
-    check("tabs: shown between rounds, all three", tabs.all_inner_texts() == ["Scores", "Hands won", "Last round"])
-    check("tabs: Last round is open now", tabs.nth(2).is_enabled())
+    check("tabs: shown between rounds", tabs.all_inner_texts() == ["Scores", "Hands won"])
     tabs.nth(1).click()
     a.wait_for_selector(".hwon")
     check("hands won: one group per hand won in round 1", a.locator(".hw-h").count() == me["made"], f"{a.locator('.hw-h').count()} vs made {me['made']}")
@@ -267,41 +264,11 @@ def s_hands_won_and_last_round(browser):
         check("hands won: says so when none were won", "No hands won" in a.locator(".hwon").inner_text())
     check("hands won: round line shows hands made of called", re.search(r"Round 1.*\d+ of \d+", a.locator(".hwon h4").first.inner_text().replace("\n", " ")) is not None, a.locator(".hwon h4").first.inner_text())
     check("hands won: no sideways scroll", a.evaluate("document.documentElement.scrollWidth <= innerWidth"))
-    # Last round: the final hand of round 1, large
-    tabs.nth(2).click()
-    a.wait_for_selector(".lastr .slot")
-    check("last round: heading names the round", "Round 1 · the final hand" in a.locator(".lastr").inner_text(), a.locator(".lastr").inner_text()[:80])
-    check("last round: one card per player (4), big", a.locator(".lastr .card").count() == 4 and a.locator(".lastr .card").first.bounding_box()["width"] >= 34)
-    check("last round: exactly one card circled as the winner", a.locator(".lastr .slot.win").count() == 1 and a.locator(".lastr .slot.win svg.circ").count() == 1)
-    check("last round: led card tagged", a.locator(".lastr .slot .tg", has_text="led").count() == 1)
-    lr = snap(a)["lastRound"]
-    check("last round: shows the engine's final hand", sorted(t["card"] for t in lr["trick"]) == sorted(a.locator(".lastr .card").evaluate_all("els=>els.map(e=>e.getAttribute('aria-label'))")) or len(lr["trick"]) == 4)
-    names = a.locator(".lastr .slot .sn").all_inner_texts()
-    check("last round: every player's name is under their card", len(names) == 4 and "You" in names, str(names))
-    check("last round: says when it closes", "45 seconds into the next round" in a.locator(".lastr").inner_text())
-    # the voyeur has it too (it is on the table for everyone)
-    b.wait_for_function("window.__jn.snap.phase==='roundover'", timeout=8000)
-    b.locator(".insc .tabs .chip", has_text="Last round").click()
-    b.wait_for_selector(".lastr .slot")
-    check("voyeur: Last round works too", b.locator(".lastr .card").count() == 4)
-    tabs.nth(1).click()
-    a.wait_for_selector(".hwon")
     # round 2, then both rounds are listed, newest first
     a.locator("[data-a=next]").first.click()
     a.wait_for_function("window.__jn.snap.phase==='calling'", timeout=6000)
     a.locator("[data-a=screen]").first.click()
     a.wait_for_selector("[aria-label='The Screen'] .tabs")
-    lt = a.locator("[aria-label='The Screen'] .tabs .chip", has_text="Last round")
-    check("round 2 just started: Last round is still open", lt.is_enabled())
-    lt.click()
-    a.wait_for_selector("[aria-label='The Screen'] .lastr .slot")
-    check("round 2 just started: it still shows round 1's final hand", "Round 1 · the final hand" in a.locator("[aria-label='The Screen'] .lastr").inner_text())
-    # the lock: it closes a set time into round 2 (45 s live, 2.5 s on the test server) and the cards are no longer sent
-    a.wait_for_function("document.querySelectorAll(\"[aria-label='The Screen'] .tabs .chip\")[2].disabled", timeout=8000)
-    check("locked: the tab greys out by itself", a.locator("[aria-label='The Screen'] .tabs .chip", has_text="Last round").is_disabled())
-    check("locked: the page falls back to the scores", a.locator("[aria-label='The Screen'] .lastr").count() == 0 and a.locator("[aria-label='The Screen'] table.sc").count() == 1)
-    check("locked: the game no longer sends the cards", a.evaluate("window.__jn.snap.lastRound") is None)
-    check("locked: the voyeur's copy is locked as well", b.evaluate("window.__jn.snap.lastRound") is None)
     a.locator("[aria-label='The Screen'] .tabs .chip", has_text="Hands won").click()
     a.wait_for_selector(".hwon h4")
     heads = a.locator(".hwon h4").all_inner_texts()
@@ -317,7 +284,6 @@ def s_hands_won_and_last_round(browser):
     made_total = sum(r["made"] for r in s2["wins"])
     check("hands won: groups match the engine's count across rounds", a.locator(".hw-h").count() == sum(len(r["hands"]) for r in s2["wins"]) == made_total, str(made_total))
     check("scores tab still works", a.locator(".insc .tabs .chip").first.click() is None and a.locator(".insc table.sc").count() == 1)
-    check("last round reopens when round 2 ends (round 2's final hand)", a.evaluate("window.__jn.snap.lastRound && window.__jn.snap.lastRound.i") == 1)
     # the voyeur who was allowed in sees Hosty's hands won
     b.wait_for_function("window.__jn.snap.phase==='roundover'", timeout=8000)
     b.locator(".insc .tabs .chip", has_text="Hands won").click()
@@ -610,7 +576,7 @@ if __name__ == "__main__":
     only = sys.argv[1:]
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        suite = [s_join_offer_and_hand, s_chat_chips_and_tag, s_hands_won_and_last_round, s_leave_handover,
+        suite = [s_join_offer_and_hand, s_chat_chips_and_tag, s_hands_won, s_leave_handover,
                  s_leave_no_voyeur_goes_to_bot, s_away_becomes_bot_and_returns, s_host_gives_seat,
                  s_small_phone_voyeur_layout, s_full_room_and_limits, s_game_end]
         for fn in suite:

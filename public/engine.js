@@ -196,10 +196,7 @@
     opts = opts || {};
     this.code = code;
     this.fast = !!opts.fast;
-    this.lastHoldMs = opts.lastHoldMs || (this.fast ? 1 : 4000);   // the table stays this long after the last hand of a round
-    this.lastRoundMs = opts.lastRoundMs || 45000;   // the Last round tab stays open until this long after the next round starts
-    this.roundStartAt = 0;
-    this.lockTimer = null;
+    this.handHoldMs = opts.handHoldMs || (this.fast ? 1 : 6000);   // after every hand the table stays this long before play moves on
     this.againDelayMs = opts.againDelayMs != null ? opts.againDelayMs : (this.fast ? 0 : 30000);   // final scores stay up this long before the next game
     this.overAt = null;         // when the game ended
     this.roundTricks = [];      // every hand of the round under way: { trick: [{ pid, card }], winner }
@@ -620,14 +617,6 @@
     this.trick = []; this.led = null; this.trickWinner = null;
     this.played = [];
     this.roundTricks = [];
-    // the previous round's last hand can be looked at until lastRoundMs into this round; an update goes out when it locks
-    this.roundStartAt = Date.now();
-    clearTimeout(this.lockTimer);
-    if (this.history.length) {
-      var self = this;
-      this.lockTimer = setTimeout(function () { self.emit(); }, this.lastRoundMs + 60);
-      if (this.lockTimer && this.lockTimer.unref) this.lockTimer.unref();
-    }
     this.emit();
   };
 
@@ -679,10 +668,10 @@
     this.turnIdx = this.players.indexOf(w);
     this.emit();
     var self = this;
-    // After the last hand of a round the table is held longer (it shows every hand of the round) before the Screen opens.
-    var lastHand = p.hand.length === 0;
+    // Every hand: once everyone has played, the table stays for handHoldMs (6 s) so the cards can be read, then play
+    // moves on (the next hand, or the Screen after the round's last hand).
     clearTimeout(this.ttimer);
-    this.ttimer = setTimeout(function () { self.afterTrick(); }, lastHand ? this.lastHoldMs : (this.fast ? 1 : 1600));
+    this.ttimer = setTimeout(function () { self.afterTrick(); }, this.handHoldMs);
     return { ok: true };
   };
 
@@ -765,19 +754,7 @@
   };
 
   Game.prototype.destroy = function () {
-    clearTimeout(this.timer); clearTimeout(this.ttimer); clearTimeout(this.lockTimer);
-  };
-
-  // The final hand of the last finished round, for the Last round tab (in case a card was missed to lag). It is
-  // open from the end of the round until lastRoundMs into the next one; after that it is not sent at all.
-  Game.prototype.lastRoundOpen = function () {
-    if (this.phase === 'lobby' || !this.history.length) return null;
-    var h = this.history[this.history.length - 1];
-    if (!h.tricks || !h.tricks.length) return null;
-    var ended = this.phase === 'roundover' || this.phase === 'gameover';
-    if (!ended && Date.now() - this.roundStartAt >= this.lastRoundMs) return null;
-    var hand = h.tricks[h.tricks.length - 1];
-    return { i: h.i, cards: h.cards, cut: h.cut, res: h.res, trick: hand.trick, winner: hand.winner, led: hand.trick[0].card[0] };
+    clearTimeout(this.timer); clearTimeout(this.ttimer);
   };
 
   // The hands this player has won, round by round (the round under way last, with hands so far)
@@ -816,7 +793,6 @@
       }),
       // the score lines only; every hand of every round stays on the server and is sent as `wins` (the player's own)
       history: this.history.map(function (h) { return { i: h.i, cards: h.cards, cut: h.cut, res: h.res }; }),
-      lastRound: this.lastRoundOpen(),
       againIn: this.phase === 'gameover' ? Math.max(0, this.overAt + this.againDelayMs - Date.now()) : null,
       wins: null,
       round: this.round, turn: turn, led: this.led,

@@ -22,7 +22,7 @@ Don't redeploy mid-game: live rooms are held in memory and drop on restart. The 
 - `docs/DESIGN.md`, `docs/PRODUCT.md`  design system and product notes
 - `test/engine.test.js` rule checks and full simulated games
 - `test/voyeur.test.js` voyeurs, seat handover, taking a seat back, away to bot, the last hand
-- `test/voyeur_ui.py` browser tests for the same (Playwright; run the server with `JD_FAST=1 JD_LAST_ROUND_MS=2500 JD_AGAIN_MS=3000` so bots move instantly and the Last round lock and the game-end wait are short; live rooms use 45 s and 30 s)
+- `test/voyeur_ui.py` browser tests for the same (Playwright; run the server with `JD_FAST=1 JD_AGAIN_MS=3000` so bots move instantly and the game-end wait is short; live rooms wait 30 s)
 - `build.js`         makes the single-page demo
 
 ## Rules as built
@@ -47,8 +47,8 @@ Don't redeploy mid-game: live rooms are held in memory and drop on restart. The 
   Calling pad: numbers 0..cards, the forbidden last-caller number struck out with the reason. No suggestions.
   Play a card by flicking it up, or tap it to pick it and press the Play button under your hand (tap again to put it back). The winning card gets an ink circle.
 - Screen: shown on the page between rounds (Hide returns to the table with The Screen / Deal buttons).
-  Three tabs: **Scores**; **Hands won**: every hand the player has taken, round by round, newest first (the round under way at the top), each hand as its four cards with the winning card ringed, a round with none says "No hands won" (a voyeur sees it for the player whose hand they are allowed to see, otherwise it is greyed out); and **Last round**: the final hand of the last finished round, large, with the winner circled, led and cut tagged, and hands made of called under each name. Last round is open from the end of a round until 45 seconds into the next one, then it locks: the tab greys out and the game stops sending those cards. It is greyed out in round 1.
-- Round end: after the last hand of every round the table stays for 4 seconds (the last hand on the table), then the Screen opens.
+  Two tabs: **Scores**, and **Hands won**: every hand the player has taken, round by round, newest first (the round under way at the top), each hand as its four cards with the winning card ringed. A round with none says "No hands won". A voyeur sees it for the player whose hand they are allowed to see; otherwise the tab is greyed out.
+- Every hand: once everyone has played, the table stays for 6 seconds (the cards and the circled winner stay on the table) before the next hand, or the Screen after a round's last hand. A 4-player game is 91 hands, so this adds about 9 minutes of reading time to a full game.
 - Game over: the final scores stay up. **Play again** deals a new game at once with the same players and the same bots (voyeurs sit down, spare bots make room). **Game setup** goes to the lobby of the same room, where the host can add or remove bots and players and then press Start. Both are host-only and both wait 30 seconds from the end of the game (the countdown is on the buttons and everyone sees it; the server enforces it, so a refresh doesn't skip it). Leave works any time.
   Made calls show their points in bold; missed calls are struck in red with the hands actually made.
 - Chat: every new message pops up as a sticky note. Quick replies plus free text.
