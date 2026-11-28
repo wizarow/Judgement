@@ -196,6 +196,13 @@
     opts = opts || {};
     this.code = code;
     this.fast = !!opts.fast;
+    this.lastHoldMs = opts.lastHoldMs || (this.fast ? 1 : 4000);   // the table stays this long after the last hand of a round
+    this.lastRoundMs = opts.lastRoundMs || 45000;   // the Last round tab stays open until this long after the next round starts
+    this.roundStartAt = 0;
+    this.lockTimer = null;
+    this.againDelayMs = opts.againDelayMs != null ? opts.againDelayMs : (this.fast ? 0 : 30000);   // final scores stay up this long before the next game
+    this.overAt = null;         // when the game ended
+    this.roundTricks = [];      // every hand of the round under way: { trick: [{ pid, card }], winner }
     this.players = [];
     this.size = 4;
     this.phase = 'lobby';
@@ -219,20 +226,31 @@
     this.turnEnd = null;
     this.chat = [];
     this.chatSeq = 0;
+    this.voyeurs = [];          // people who joined after the start to watch: { id, name, token, connected, dcAt, peek }
+    this.awayLimit = 2;         // auto-played turns in a row (while away) before the seat becomes a bot
     this.closed = false;
     this.touched = Date.now();
     this.onChange = function () {};
-    this.onKick = function () {};
+    this.onKick = function () {};   // (token, kicked): the server closes that person's live stream
   }
+
+  var MAX_VOYEURS = 10;
 
   Game.prototype.humans = function () { return this.players.filter(function (p) { return !p.bot; }); };
   Game.prototype.byId = function (id) { return this.players.filter(function (p) { return p.id === id; })[0]; };
-  Game.prototype.byToken = function (t) { return t ? this.players.filter(function (p) { return p.token === t; })[0] : undefined; };
+  Game.prototype.voyeurById = function (id) { return this.voyeurs.filter(function (v) { return v.id === id; })[0]; };
+  // a player or a voyeur: both share one id counter, and a token follows its person when a voyeur takes a seat
+  Game.prototype.who = function (id) { return this.byId(id) || this.voyeurById(id); };
+  Game.prototype.byToken = function (t) {
+    if (!t) return undefined;
+    return this.players.filter(function (p) { return p.token === t; })[0] ||
+      this.voyeurs.filter(function (v) { return v.token === t; })[0];
+  };
 
   Game.prototype.uniqueName = function (name, exceptId) {
     var base = cleanName(name), n = base, k = 2, self = this;
     var taken = function (x) {
-      return self.players.some(function (p) { return p.id !== exceptId && p.name.toLowerCase() === x.toLowerCase(); });
+      return self.players.concat(self.voyeurs).some(function (p) { return p.id !== exceptId && p.name.toLowerCase() === x.toLowerCase(); });
     };
     while (taken(n)) { n = base.slice(0, 14) + ' ' + k; k++; }
     return n;
@@ -250,10 +268,108 @@
     return { ok: true, pid: p.id };
   };
 
+  // What someone who types a code for a game that has already started is offered: watch it, and take a seat back
+  // if their name matches a seat that was theirs (dropped off, or left).
+  Game.prototype.joinInfo = function (name) {
+    return {
+      players: this.humans().map(function (p) { return { id: p.id, name: p.name }; }),
+      claim: !!this.seatByName(name),
+      full: this.voyeurs.length >= MAX_VOYEURS
+    };
+  };
+
+  Game.prototype.addVoyeur = function (name, token, peekPid) {
+    if (this.phase === 'lobby') return { err: 'Join the room as a player' };
+    if (!cleanName(name)) return { err: 'Enter your name' };
+    if (this.voyeurs.length >= MAX_VOYEURS) return { err: 'Too many voyeurs in this room (' + MAX_VOYEURS + ')' };
+    var v = { id: this.nextId++, name: this.uniqueName(name), token: token || null, connected: true, dcAt: 0, peek: null };
+    this.voyeurs.push(v);
+    var t = peekPid != null ? this.byId(parseInt(peekPid, 10)) : null;
+    if (t && !t.bot) v.peek = { pid: t.id, state: 'pending' };   // that player is asked; until they say yes it is the table only
+    this.pushChat(null, '', v.name + ' joined as a voyeur', true);
+    this.emit();
+    return { ok: true, pid: v.id };
+  };
+
+  // A voyeur asks to see one player's hand (pid), or goes back to the table only (null)
+  Game.prototype.setPeek = function (v, pid) {
+    if (pid === null || pid === undefined || pid === '') { v.peek = null; this.emit(); return { ok: true }; }
+    var t = this.byId(parseInt(pid, 10));
+    if (!t) return { err: 'No such player' };
+    if (t.bot) return { err: 'Bots have no one to ask, so they stay on the table view' };
+    v.peek = { pid: t.id, state: 'pending' };
+    this.emit();
+    return { ok: true };
+  };
+
+  // Seats that used to be a person's: a bot now, and that person can come back
+  Game.prototype.seatByName = function (name) {
+    var want = cleanName(name).toLowerCase();
+    if (!want || this.phase === 'lobby') return undefined;
+    return this.players.filter(function (p) { return p.bot && p.ex && p.ex.name.toLowerCase() === want; })[0];
+  };
+  Game.prototype.seatByClaim = function (token) {
+    if (!token || this.phase === 'lobby') return undefined;
+    return this.players.filter(function (p) { return p.bot && p.ex && p.ex.claim === token; })[0];
+  };
+  Game.prototype.takeBack = function (p, token) {
+    p.bot = false; p.token = token; p.connected = true; p.ex = null; p.awayAuto = 0; delete p.level;
+    if (!this.hostId) this.hostId = p.id;
+    this.pushChat(null, '', p.name + ' is back at the table', true);
+    this.emit();
+    return p;
+  };
+  // same browser: the saved token is enough
+  Game.prototype.reclaim = function (token) {
+    var p = this.seatByClaim(token);
+    return p ? this.takeBack(p, token) : null;
+  };
+  // another device: the same name, offered when joining
+  Game.prototype.claimByName = function (name, token) {
+    var p = this.seatByName(name);
+    return p ? this.takeBack(p, token) : null;
+  };
+
+  // a seat stops being played by a person: a bot takes over, keeping hand, call and score
+  Game.prototype.becomeBot = function (p, mode) {
+    // mode: 'away' (can return with the same browser or by name), 'left' (by name), 'kicked' (cannot return)
+    p.ex = mode === 'kicked' ? null : { name: p.name, claim: mode === 'away' ? p.token : null };
+    p.bot = true; p.token = null; p.connected = true; p.awayAuto = 0;
+    this.voyeurs.forEach(function (v) { if (v.peek && v.peek.pid === p.id) v.peek = null; });
+  };
+  // a voyeur sits down in a seat (hand, call and score stay as they were)
+  Game.prototype.giveSeat = function (t, v) {
+    this.voyeurs = this.voyeurs.filter(function (x) { return x.id !== v.id; });
+    this.voyeurs.forEach(function (x) { if (x.peek && x.peek.pid === t.id) x.peek = null; });
+    t.bot = false; t.ex = null; t.awayAuto = 0; delete t.level;
+    t.name = this.uniqueName(v.name, t.id);
+    t.token = v.token; t.connected = v.connected;
+  };
+  // an away player's turn is auto-played; after awayLimit in a row the seat becomes a bot
+  Game.prototype.noteAway = function (p) {
+    p.awayAuto = (p.awayAuto || 0) + 1;
+    if (p.awayAuto < this.awayLimit) return;
+    var name = p.name;
+    this.becomeBot(p, 'away');
+    if (this.hostId === p.id) this.reassignHost();
+    this.pushChat(null, '', name + ' was away for ' + this.awayLimit + ' turns, so a bot plays the seat. They can take it back', true);
+    this.emit();
+  };
+  // voyeurs who closed the page and never came back are dropped
+  Game.prototype.pruneVoyeurs = function (now) {
+    var gone = this.voyeurs.filter(function (v) { return !v.connected && v.dcAt && now - v.dcAt > 120000; });
+    if (!gone.length) return;
+    var self = this;
+    gone.forEach(function (v) { self.onKick(v.token, false); });
+    this.voyeurs = this.voyeurs.filter(function (v) { return gone.indexOf(v) < 0; });
+    this.emit();
+  };
+
   Game.prototype.setConnected = function (pid, v) {
-    var p = this.byId(pid);
+    var p = this.who(pid);
     if (!p || p.bot || p.connected === v) return;
     p.connected = v;
+    if (v) p.awayAuto = 0; else p.dcAt = Date.now();
     this.emit();
   };
 
@@ -264,15 +380,50 @@
     this.onChange();
   };
 
-  Game.prototype.reassignHost = function () {
-    var h = this.humans().filter(function (p) { return p.connected; })[0] || this.humans()[0];
+  Game.prototype.reassignHost = function (exceptId) {
+    var hs = this.humans().filter(function (p) { return p.id !== exceptId; });
+    var h = hs.filter(function (p) { return p.connected; })[0] || hs[0] || this.humans()[0];
     this.hostId = h ? h.id : null;
-    if (!h) this.closed = true;
+  };
+
+  // What a voyeur may do: watch, chat, rename, choose whose hand to ask for, and stop watching.
+  Game.prototype.voyeurAct = function (v, a) {
+    switch (a.type) {
+      case 'rename': {
+        if (!cleanName(a.name)) return { err: 'Enter a name' };
+        v.name = this.uniqueName(a.name, v.id);
+        this.emit();
+        return { ok: true };
+      }
+      case 'chat': {
+        var text = String(a.text || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+        if (!text) return { err: 'Type a message first' };
+        var now = Date.now();
+        if (v.lastChat && now - v.lastChat < 350) return { err: 'Slow down' };
+        v.lastChat = now;
+        this.pushChat(v.id, v.name, text, false, true);
+        this.emit();
+        return { ok: true };
+      }
+      case 'peek': return this.setPeek(v, a.pid);
+      case 'leave': {
+        this.voyeurs = this.voyeurs.filter(function (x) { return x.id !== v.id; });
+        this.onKick(v.token, false);
+        if (!this.humans().length && !this.voyeurs.length) this.closed = true;
+        this.emit();
+        return { ok: true };
+      }
+    }
+    return { err: 'Voyeurs can watch and chat' };
   };
 
   Game.prototype.act = function (pid, a) {
     var p = this.byId(pid);
-    if (!p || !a) return { err: 'Not in this room' };
+    if (!a) return { err: 'Not in this room' };
+    if (!p) {
+      var vy = this.voyeurById(pid);
+      return vy ? this.voyeurAct(vy, a) : { err: 'Not in this room' };
+    }
     var isHost = pid === this.hostId;
     switch (a.type) {
       case 'rename': {
@@ -318,11 +469,29 @@
         if (!isHost) return { err: 'Only the host can do that' };
         var t = this.byId(a.pid);
         if (!t || t.bot || t.id === pid) return { err: 'Cannot remove that player' };
-        this.removeHuman(t, true);
+        this.removeHuman(t, true, a.to);
         return { ok: true };
       }
       case 'leave': {
-        this.removeHuman(p, false);
+        this.removeHuman(p, false, a.to);
+        return { ok: true };
+      }
+      case 'peekreply': {   // the player a voyeur asked about says yes or no (a yes can be taken back with another no)
+        var vy2 = this.voyeurById(parseInt(a.vid, 10));
+        if (!vy2 || !vy2.peek || vy2.peek.pid !== pid) return { err: 'Not now' };
+        vy2.peek.state = a.ok ? 'ok' : 'denied';
+        this.emit();
+        return { ok: true };
+      }
+      case 'seat': {   // the host gives a bot's seat to a voyeur, between rounds
+        if (!isHost) return { err: 'Only the host can do that' };
+        if (this.phase !== 'roundover') return { err: 'Seats change hands between rounds' };
+        var sv = this.voyeurById(parseInt(a.vid, 10)), st = this.byId(parseInt(a.pid, 10));
+        if (!sv || !st || !st.bot) return { err: 'Pick a bot seat' };
+        var was = st.name;
+        this.giveSeat(st, sv);
+        this.pushChat(null, '', st.name + ' takes ' + was + '’s seat', true);
+        this.emit();
         return { ok: true };
       }
       case 'start': {
@@ -332,54 +501,99 @@
         this.begin();
         return { ok: true };
       }
-      case 'call': return this.doCall(p, a.n);
-      case 'play': return this.doPlay(p, a.card);
+      case 'call': p.awayAuto = 0; return this.doCall(p, a.n);
+      case 'play': p.awayAuto = 0; return this.doPlay(p, a.card);
       case 'next': {
         if (this.phase !== 'roundover') return { ok: true };   // someone else already dealt: nothing to do
         this.startRound(this.round.i + 1);
         return { ok: true };
       }
-      case 'again': {
+      case 'again':    // deal a new game now, same players and bots
+      case 'setup': {  // back to the lobby to add or remove players first
         if (!isHost || this.phase !== 'gameover') return { err: 'Only the host can do that' };
-        this.players = this.players.filter(function (x) { return !x.bot; });
-        this.players.forEach(function (x) { x.score = 0; x.call = null; x.made = 0; x.hand = []; });
-        this.history = []; this.round = null; this.winners = []; this.trick = []; this.led = null;
-        this.schedKey = null; this.turnEnd = null; this.played = [];
-        this.phase = 'lobby';
-        this.emit();
-        return { ok: true };
+        // the final scores stay up for a while first (a little slack for clock drift)
+        var wait = this.overAt + this.againDelayMs - Date.now();
+        if (wait > 400) return { err: 'The next game can start in ' + Math.ceil(wait / 1000) + 's' };
+        return a.type === 'again' ? this.newGame() : this.toLobby();
       }
     }
     return { err: 'Unknown action' };
   };
 
-  Game.prototype.pushChat = function (pid, name, text, sys) {
-    this.chat.push({ id: ++this.chatSeq, pid: pid, name: name, text: text, sys: !!sys });
+  // voyeurs sit down for the next game while there is room at the table
+  Game.prototype.seatVoyeurs = function () {
+    var self = this, stay = [];
+    this.voyeurs.forEach(function (v) {
+      if (self.humans().length < 8) self.players.push({ id: v.id, name: v.name, bot: false, token: v.token, connected: v.connected, score: 0, call: null, made: 0, hand: [] });
+      else { v.peek = null; stay.push(v); }
+    });
+    this.voyeurs = stay;
+    if (this.humans().length > this.size) this.size = this.humans().length;
+  };
+  Game.prototype.resetGame = function () {
+    this.players.forEach(function (x) { x.score = 0; x.call = null; x.made = 0; x.hand = []; x.awayAuto = 0; });
+    this.history = []; this.round = null; this.winners = []; this.trick = []; this.led = null; this.trickWinner = null;
+    this.schedKey = null; this.turnEnd = null; this.played = []; this.roundTricks = []; this.overAt = null;
+  };
+  // The lobby again: bots go (the lobby shows their seats), the people stay, voyeurs sit down.
+  Game.prototype.toLobby = function () {
+    this.players = this.humans();
+    this.resetGame();
+    this.seatVoyeurs();
+    this.phase = 'lobby';
+    this.emit();
+    return { ok: true };
+  };
+  // A new game at once with the same people and the same bots (voyeurs sit down; spare bots make room for them).
+  Game.prototype.newGame = function () {
+    var bots = this.players.filter(function (p) { return p.bot; });
+    this.players = this.humans();
+    this.resetGame();
+    this.seatVoyeurs();
+    this.begin(bots);
+    return { ok: true };
+  };
+
+  Game.prototype.pushChat = function (pid, name, text, sys, voy) {
+    this.chat.push({ id: ++this.chatSeq, pid: pid, name: name, text: text, sys: !!sys, voy: !!voy });
     if (this.chat.length > 80) this.chat.splice(0, this.chat.length - 80);
   };
 
-  Game.prototype.removeHuman = function (t, kicked) {
-    var token = t.token;
+  // Someone leaves, or the host removes them. In the lobby the seat just goes. In a game a connected voyeur can
+  // take it over (toVid), otherwise a bot plays it on. Hand, call and score stay with the seat.
+  Game.prototype.removeHuman = function (t, kicked, toVid) {
+    var token = t.token, name = t.name, took = false;
     if (this.phase === 'lobby') {
       this.players = this.players.filter(function (x) { return x.id !== t.id; });
     } else {
-      t.bot = true; t.token = null; t.connected = true;
+      var v = toVid != null ? this.voyeurById(parseInt(toVid, 10)) : null;
+      var what = name + (kicked ? ' was removed' : ' left');
+      if (v && v.connected) {
+        this.giveSeat(t, v); took = true;
+        this.pushChat(null, '', what + '. ' + t.name + ' takes the seat', true);
+      } else {
+        this.becomeBot(t, kicked ? 'kicked' : 'left');
+        this.pushChat(null, '', what + '. A bot plays the seat', true);
+      }
     }
-    if (this.hostId === t.id) this.reassignHost();
-    this.onKick(t.id, token, kicked);
-    if (!this.humans().length) this.closed = true;
+    if (this.hostId === t.id) this.reassignHost(took ? t.id : undefined);
+    this.onKick(token, kicked);
+    if (!this.humans().length && !this.voyeurs.length) this.closed = true;
     this.emit();
   };
 
-  Game.prototype.begin = function () {
+  // keepBots: bots from the game before, reused (so "Play again" keeps the same table)
+  Game.prototype.begin = function (keepBots) {
     var humans = this.humans();
     var n = Math.max(this.size, humans.length);
+    var want = n - humans.length;
+    var bots = (keepBots || []).slice(0, want);
     var used = {};
-    humans.forEach(function (p) { used[p.name.toLowerCase()] = 1; });
+    humans.concat(bots).forEach(function (p) { used[p.name.toLowerCase()] = 1; });
     var pool = shuffle(BOT_NAMES.slice()).filter(function (x) { return !used[x.toLowerCase()]; });
-    var bots = [];
-    for (var i = 0; i < n - humans.length; i++) {
-      bots.push({ id: this.nextId++, name: pool[i] || ('Bot ' + (i + 1)), bot: true, token: null, connected: true, score: 0, call: null, made: 0, hand: [] });
+    var kept = bots.length;
+    for (var i = kept; i < want; i++) {
+      bots.push({ id: this.nextId++, name: pool[i - kept] || ('Bot ' + (i + 1)), bot: true, token: null, connected: true, score: 0, call: null, made: 0, hand: [] });
     }
     this.players = shuffle(humans.concat(bots));
     this.players.forEach(function (p) { p.score = 0; });
@@ -405,6 +619,15 @@
     this.turnIdx = first;
     this.trick = []; this.led = null; this.trickWinner = null;
     this.played = [];
+    this.roundTricks = [];
+    // the previous round's last hand can be looked at until lastRoundMs into this round; an update goes out when it locks
+    this.roundStartAt = Date.now();
+    clearTimeout(this.lockTimer);
+    if (this.history.length) {
+      var self = this;
+      this.lockTimer = setTimeout(function () { self.emit(); }, this.lastRoundMs + 60);
+      if (this.lockTimer && this.lockTimer.unref) this.lockTimer.unref();
+    }
     this.emit();
   };
 
@@ -451,14 +674,15 @@
     var w = this.byId(wid);
     w.made++;
     this.trickWinner = wid;
+    this.roundTricks.push({ trick: this.trick.map(function (t) { return { pid: t.pid, card: t.card }; }), winner: wid });
     this.phase = 'trickdone';
     this.turnIdx = this.players.indexOf(w);
     this.emit();
     var self = this;
-    // After the last hand of a round the table is held longer before the Screen opens.
+    // After the last hand of a round the table is held longer (it shows every hand of the round) before the Screen opens.
     var lastHand = p.hand.length === 0;
     clearTimeout(this.ttimer);
-    this.ttimer = setTimeout(function () { self.afterTrick(); }, this.fast ? 1 : (lastHand ? 4000 : 1600));
+    this.ttimer = setTimeout(function () { self.afterTrick(); }, lastHand ? this.lastHoldMs : (this.fast ? 1 : 1600));
     return { ok: true };
   };
 
@@ -477,12 +701,14 @@
       p.score += pts;
       res[p.id] = { call: p.call, made: p.made, pts: pts };
     });
-    this.history.push({ i: this.round.i, cards: this.round.cards, cut: this.round.cut, res: res });
+    // every hand of the round is kept with it, for the Hands won tab on the Screen
+    this.history.push({ i: this.round.i, cards: this.round.cards, cut: this.round.cut, res: res, tricks: this.roundTricks });
     this.trick = []; this.led = null; this.trickWinner = null;
     if (this.round.i >= this.per - 1) {
       var max = Math.max.apply(null, this.players.map(function (p) { return p.score; }));
       this.winners = this.players.filter(function (p) { return p.score === max; }).map(function (p) { return p.id; });
       this.phase = 'gameover';
+      this.overAt = Date.now();
     } else {
       this.phase = 'roundover';
     }
@@ -502,9 +728,9 @@
     if (key === this.schedKey && this.timer) return;
     clearTimeout(this.timer); this.timer = null;
     this.schedKey = key; this.turnEnd = null;
-    var delay, timed = false;
+    var delay, timed = false, away = false;
     if (cur.bot) delay = this.fast ? 1 : 600 + rnd(500);
-    else if (!cur.connected) delay = this.fast ? 1 : (this.autoMs || 90000);
+    else if (!cur.connected) { delay = this.fast ? 1 : (this.autoMs || 90000); away = true; }
     else if (this.timerSec) { delay = this.timerSec * 1000 * this.timerScale; timed = true; }
     else return;
     if (timed) this.turnEnd = Date.now() + delay;
@@ -514,32 +740,63 @@
       if (timed && self.players[self.turnIdx] === cur && !cur.bot) {
         self.pushChat(null, '', 'Time’s up for ' + cur.name + ' — played automatically', true);
       }
-      self.botAct(cur.id);
+      var played = self.botAct(cur.id);
+      // an absent player's auto-played turns are counted: awayLimit in a row hands the seat to a bot
+      if (played && away && !cur.bot && !cur.connected) self.noteAway(cur);
     }, delay);
   };
 
   Game.prototype.botAct = function (pid) {
     var cur = this.players[this.turnIdx];
-    if (!cur || cur.id !== pid) return;
+    if (!cur || cur.id !== pid) return false;
+    var r = null;
     // a human whose time ran out (or who is away) is played for at Medium, whatever the bot level is
     var level = cur.bot ? (cur.level || this.botLevel) : 'medium';
     if (this.phase === 'calling') {
       var cs = this.callState();
       var k = this.players.filter(function (p) { return p.call !== null; }).length;
       var n = Bot.call(cur.hand, this.round.cut, this.n, this.round.cards, cs.sum, cs.isLast, level, { k: k });
-      this.doCall(cur, n);
+      r = this.doCall(cur, n);
     } else if (this.phase === 'playing') {
       var c = Bot.play(cur.hand, this.led, this.trick, this.round.cut, cur.call - cur.made, level, { n: this.n, played: this.played });
-      this.doPlay(cur, c);
+      r = this.doPlay(cur, c);
     }
+    return !!(r && r.ok);
   };
 
   Game.prototype.destroy = function () {
-    clearTimeout(this.timer); clearTimeout(this.ttimer);
+    clearTimeout(this.timer); clearTimeout(this.ttimer); clearTimeout(this.lockTimer);
+  };
+
+  // The final hand of the last finished round, for the Last round tab (in case a card was missed to lag). It is
+  // open from the end of the round until lastRoundMs into the next one; after that it is not sent at all.
+  Game.prototype.lastRoundOpen = function () {
+    if (this.phase === 'lobby' || !this.history.length) return null;
+    var h = this.history[this.history.length - 1];
+    if (!h.tricks || !h.tricks.length) return null;
+    var ended = this.phase === 'roundover' || this.phase === 'gameover';
+    if (!ended && Date.now() - this.roundStartAt >= this.lastRoundMs) return null;
+    var hand = h.tricks[h.tricks.length - 1];
+    return { i: h.i, cards: h.cards, cut: h.cut, res: h.res, trick: hand.trick, winner: hand.winner, led: hand.trick[0].card[0] };
+  };
+
+  // The hands this player has won, round by round (the round under way last, with hands so far)
+  Game.prototype.winsFor = function (pid) {
+    var out = [], p = this.byId(pid);
+    this.history.forEach(function (h) {
+      var r = h.res[pid] || { call: 0, made: 0, pts: 0 };
+      out.push({ i: h.i, cards: h.cards, cut: h.cut, done: true, call: r.call, made: r.made, pts: r.pts,
+        hands: (h.tricks || []).filter(function (t) { return t.winner === pid; }) });
+    });
+    if (this.round && this.round.i >= this.history.length && this.phase !== 'lobby' && this.phase !== 'gameover') {
+      out.push({ i: this.round.i, cards: this.round.cards, cut: this.round.cut, done: false, call: p ? p.call : null, made: p ? p.made : 0, pts: 0,
+        hands: this.roundTricks.filter(function (t) { return t.winner === pid; }) });
+    }
+    return out;
   };
 
   Game.prototype.snapshot = function (pid) {
-    var me = this.byId(pid);
+    var me = this.byId(pid), vy = me ? null : this.voyeurById(pid);
     var inGame = this.phase !== 'lobby';
     var humans = this.humans();
     var n = inGame ? this.n : Math.max(this.size, humans.length);
@@ -551,9 +808,18 @@
       size: this.size, n: n, per: per, removed: 52 - n * per,
       botCount: inGame ? this.players.filter(function (p) { return p.bot; }).length : n - humans.length,
       players: this.players.map(function (p) {
-        return { id: p.id, name: p.name, bot: p.bot, connected: p.connected, call: p.call, made: p.made, score: p.score };
+        return { id: p.id, name: p.name, bot: p.bot, connected: p.connected, call: p.call, made: p.made, score: p.score, ex: !!p.ex };
       }),
-      history: this.history, round: this.round, turn: turn, led: this.led,
+      voyeur: !!vy, meName: me ? me.name : (vy ? vy.name : ''),
+      voyeurs: this.voyeurs.map(function (v) {
+        return { id: v.id, name: v.name, connected: v.connected, peek: v.peek ? { pid: v.peek.pid, state: v.peek.state } : null };
+      }),
+      // the score lines only; every hand of every round stays on the server and is sent as `wins` (the player's own)
+      history: this.history.map(function (h) { return { i: h.i, cards: h.cards, cut: h.cut, res: h.res }; }),
+      lastRound: this.lastRoundOpen(),
+      againIn: this.phase === 'gameover' ? Math.max(0, this.overAt + this.againDelayMs - Date.now()) : null,
+      wins: null,
+      round: this.round, turn: turn, led: this.led,
       trick: this.trick, trickWinner: this.trickWinner, winners: this.winners,
       hand: me && inGame ? me.hand : [], legal: [], callInfo: null,
       timerSec: this.timerSec, botLevel: this.botLevel, seq: this.seq,
@@ -562,6 +828,20 @@
     };
     if (me && this.phase === 'playing' && turn === pid) s.legal = legalCards(me.hand, this.led);
     if (me && this.phase === 'calling' && turn === pid) s.callInfo = this.callState();
+    // Hands won: the player's own, every round. A voyeur gets them for the player whose hand they may see.
+    var wt = me || (vy && vy.peek && vy.peek.state === 'ok' ? this.byId(vy.peek.pid) : null);
+    if (wt && inGame) s.wins = this.winsFor(wt.id);
+    if (vy) {
+      // A voyeur sees the table. A hand only comes with it once that player has said yes.
+      s.peek = null;
+      if (vy.peek) {
+        var tp = this.byId(vy.peek.pid);
+        if (tp) {
+          s.peek = { pid: tp.id, name: tp.name, state: vy.peek.state };
+          if (vy.peek.state === 'ok' && inGame) s.hand = tp.hand;
+        }
+      }
+    }
     return s;
   };
 

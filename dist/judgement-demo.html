@@ -364,6 +364,46 @@ button,[role="button"]{user-select:none;-webkit-user-select:none;-webkit-touch-c
   padding:.45rem .7rem .5rem;font-family:var(--hand);font-size:1.02rem;line-height:1.3;transform:rotate(2.5deg);box-shadow:0 2px 3px rgba(0,0,0,.12),0 10px 18px rgba(0,0,0,.12);
   animation:stick .35s cubic-bezier(.2,.9,.3,1.2) both;cursor:pointer}
 .note-pop b{display:block;font-size:.85rem}
+/* voyeurs: a late joiner who watches */
+.vy{font-style:normal;font-family:var(--print);font-size:.72rem;color:var(--pencil)}
+.chip:disabled{opacity:.4;cursor:default}
+.vrow{flex:none;flex-wrap:wrap;row-gap:.2rem;padding:.15rem 0}   /* flex:none: in the Settings column a wrapped row must not be squeezed onto the text below it */
+.vrow .vbtn{flex:1 0 100%;display:flex;justify-content:flex-end;gap:.5rem}
+.tabs{margin:.1rem 0 .4rem}
+.stack{display:flex;flex-direction:column;gap:.5rem;margin-top:.4rem}
+.offer{margin-top:calc(var(--lh)*.5);display:flex;flex-direction:column;gap:.4rem;padding:.6rem .7rem;border:1.5px dashed var(--ink);border-radius:12px}
+.offer p{margin:0;max-width:none}
+.vybar{flex:none;display:flex;align-items:center;gap:.5rem;min-height:var(--lh);font-family:var(--hand);font-size:1.1rem;line-height:1.2;color:var(--graphite)}
+.vybar .grow{flex:1;min-width:0}
+.vybar b{color:var(--ink)}
+#ask{position:fixed;left:0;right:0;top:calc(var(--lh)*2 + 6px + env(safe-area-inset-top,0px));z-index:55;display:flex;flex-direction:column;align-items:center;gap:.4rem;padding:0 16px;pointer-events:none}
+.ask{pointer-events:auto;width:100%;max-width:448px;display:flex;align-items:center;gap:.5rem;background:var(--page);border:1.75px solid var(--ink);border-radius:12px;padding:.45rem .6rem;box-shadow:0 6px 18px rgba(0,0,0,.22);font-family:var(--hand);font-size:1.05rem;line-height:1.2;color:var(--graphite)}
+.ask .t{flex:1;min-width:0}
+.ask b{color:var(--ink)}
+.hwon{flex:1 1 auto;min-height:0;overflow:auto;padding:.2rem 0 .6rem}
+.hwon .sy{font-family:var(--print)}
+.hwon .sy.r{color:var(--red)}
+.hw-r{margin-top:calc(var(--lh)*.7)}
+.hw-r h4{margin:0;font-size:1.25rem;font-weight:700;line-height:var(--lh)}
+.hw-r h4 .pr{font-weight:400}
+.hw-r p{margin:0}
+.hw-h{display:flex;gap:5px;margin:.2rem 0 .55rem}
+.hw-c{display:flex;flex-direction:column;align-items:center;min-width:0}
+.hw-n{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--hand);font-size:.7rem;line-height:1.2;color:var(--graphite);margin-top:.15rem}
+.card.won{border-color:var(--ink);box-shadow:0 0 0 2px var(--ink),var(--shadow);z-index:2}
+.lastr{flex:1 1 auto;min-height:0;overflow:auto;padding:.2rem 0 .6rem}
+.lastr .lr-t{font-size:1.25rem;font-weight:700;line-height:var(--lh)}
+.lastr .sy{font-family:var(--print)}
+.lastr .sy.r{color:var(--red)}
+.lastr .slots{margin:calc(var(--lh)*1.2) auto 0}
+.lastr .lrr{font-size:.78rem;margin-top:-.1rem;text-align:center}
+.lastr .lrr.ok{color:var(--ink);font-weight:600}
+.lastr .lrr.miss{color:var(--red)}
+/* game over: Play again on its own row, Leave and Game setup below it */
+.over.btns.eg{flex-wrap:wrap}
+.over.btns.eg .btn{flex:1 1 0;white-space:nowrap}
+.over.btns.eg #againbtn,.over.btns.eg #overwait{flex:1 0 100%}
+.over.btns.eg #overwait{text-align:center}
 @keyframes stick{from{transform:translateY(-14px) rotate(-4deg);opacity:0}}
 .toast{position:fixed;left:50%;bottom:calc(1.2rem + env(safe-area-inset-bottom));transform:translateX(-50%) rotate(-1deg);z-index:60;background:var(--graphite);color:var(--page);padding:.4rem .9rem;border-radius:6px;font-size:.9rem;max-width:90vw;animation:fade .2s both}
 
@@ -410,6 +450,7 @@ button,[role="button"]{user-select:none;-webkit-user-select:none;-webkit-touch-c
 <div id="app"></div>
 <div id="sheet"></div>
 <div id="pop"></div>
+<div id="ask"></div>
 <div id="toast"></div>
 <script>window.__DEMO=true</script>
 <script>
@@ -611,6 +652,13 @@ button,[role="button"]{user-select:none;-webkit-user-select:none;-webkit-touch-c
     opts = opts || {};
     this.code = code;
     this.fast = !!opts.fast;
+    this.lastHoldMs = opts.lastHoldMs || (this.fast ? 1 : 4000);   // the table stays this long after the last hand of a round
+    this.lastRoundMs = opts.lastRoundMs || 45000;   // the Last round tab stays open until this long after the next round starts
+    this.roundStartAt = 0;
+    this.lockTimer = null;
+    this.againDelayMs = opts.againDelayMs != null ? opts.againDelayMs : (this.fast ? 0 : 30000);   // final scores stay up this long before the next game
+    this.overAt = null;         // when the game ended
+    this.roundTricks = [];      // every hand of the round under way: { trick: [{ pid, card }], winner }
     this.players = [];
     this.size = 4;
     this.phase = 'lobby';
@@ -634,20 +682,31 @@ button,[role="button"]{user-select:none;-webkit-user-select:none;-webkit-touch-c
     this.turnEnd = null;
     this.chat = [];
     this.chatSeq = 0;
+    this.voyeurs = [];          // people who joined after the start to watch: { id, name, token, connected, dcAt, peek }
+    this.awayLimit = 2;         // auto-played turns in a row (while away) before the seat becomes a bot
     this.closed = false;
     this.touched = Date.now();
     this.onChange = function () {};
-    this.onKick = function () {};
+    this.onKick = function () {};   // (token, kicked): the server closes that person's live stream
   }
+
+  var MAX_VOYEURS = 10;
 
   Game.prototype.humans = function () { return this.players.filter(function (p) { return !p.bot; }); };
   Game.prototype.byId = function (id) { return this.players.filter(function (p) { return p.id === id; })[0]; };
-  Game.prototype.byToken = function (t) { return t ? this.players.filter(function (p) { return p.token === t; })[0] : undefined; };
+  Game.prototype.voyeurById = function (id) { return this.voyeurs.filter(function (v) { return v.id === id; })[0]; };
+  // a player or a voyeur: both share one id counter, and a token follows its person when a voyeur takes a seat
+  Game.prototype.who = function (id) { return this.byId(id) || this.voyeurById(id); };
+  Game.prototype.byToken = function (t) {
+    if (!t) return undefined;
+    return this.players.filter(function (p) { return p.token === t; })[0] ||
+      this.voyeurs.filter(function (v) { return v.token === t; })[0];
+  };
 
   Game.prototype.uniqueName = function (name, exceptId) {
     var base = cleanName(name), n = base, k = 2, self = this;
     var taken = function (x) {
-      return self.players.some(function (p) { return p.id !== exceptId && p.name.toLowerCase() === x.toLowerCase(); });
+      return self.players.concat(self.voyeurs).some(function (p) { return p.id !== exceptId && p.name.toLowerCase() === x.toLowerCase(); });
     };
     while (taken(n)) { n = base.slice(0, 14) + ' ' + k; k++; }
     return n;
@@ -665,10 +724,108 @@ button,[role="button"]{user-select:none;-webkit-user-select:none;-webkit-touch-c
     return { ok: true, pid: p.id };
   };
 
+  // What someone who types a code for a game that has already started is offered: watch it, and take a seat back
+  // if their name matches a seat that was theirs (dropped off, or left).
+  Game.prototype.joinInfo = function (name) {
+    return {
+      players: this.humans().map(function (p) { return { id: p.id, name: p.name }; }),
+      claim: !!this.seatByName(name),
+      full: this.voyeurs.length >= MAX_VOYEURS
+    };
+  };
+
+  Game.prototype.addVoyeur = function (name, token, peekPid) {
+    if (this.phase === 'lobby') return { err: 'Join the room as a player' };
+    if (!cleanName(name)) return { err: 'Enter your name' };
+    if (this.voyeurs.length >= MAX_VOYEURS) return { err: 'Too many voyeurs in this room (' + MAX_VOYEURS + ')' };
+    var v = { id: this.nextId++, name: this.uniqueName(name), token: token || null, connected: true, dcAt: 0, peek: null };
+    this.voyeurs.push(v);
+    var t = peekPid != null ? this.byId(parseInt(peekPid, 10)) : null;
+    if (t && !t.bot) v.peek = { pid: t.id, state: 'pending' };   // that player is asked; until they say yes it is the table only
+    this.pushChat(null, '', v.name + ' joined as a voyeur', true);
+    this.emit();
+    return { ok: true, pid: v.id };
+  };
+
+  // A voyeur asks to see one player's hand (pid), or goes back to the table only (null)
+  Game.prototype.setPeek = function (v, pid) {
+    if (pid === null || pid === undefined || pid === '') { v.peek = null; this.emit(); return { ok: true }; }
+    var t = this.byId(parseInt(pid, 10));
+    if (!t) return { err: 'No such player' };
+    if (t.bot) return { err: 'Bots have no one to ask, so they stay on the table view' };
+    v.peek = { pid: t.id, state: 'pending' };
+    this.emit();
+    return { ok: true };
+  };
+
+  // Seats that used to be a person's: a bot now, and that person can come back
+  Game.prototype.seatByName = function (name) {
+    var want = cleanName(name).toLowerCase();
+    if (!want || this.phase === 'lobby') return undefined;
+    return this.players.filter(function (p) { return p.bot && p.ex && p.ex.name.toLowerCase() === want; })[0];
+  };
+  Game.prototype.seatByClaim = function (token) {
+    if (!token || this.phase === 'lobby') return undefined;
+    return this.players.filter(function (p) { return p.bot && p.ex && p.ex.claim === token; })[0];
+  };
+  Game.prototype.takeBack = function (p, token) {
+    p.bot = false; p.token = token; p.connected = true; p.ex = null; p.awayAuto = 0; delete p.level;
+    if (!this.hostId) this.hostId = p.id;
+    this.pushChat(null, '', p.name + ' is back at the table', true);
+    this.emit();
+    return p;
+  };
+  // same browser: the saved token is enough
+  Game.prototype.reclaim = function (token) {
+    var p = this.seatByClaim(token);
+    return p ? this.takeBack(p, token) : null;
+  };
+  // another device: the same name, offered when joining
+  Game.prototype.claimByName = function (name, token) {
+    var p = this.seatByName(name);
+    return p ? this.takeBack(p, token) : null;
+  };
+
+  // a seat stops being played by a person: a bot takes over, keeping hand, call and score
+  Game.prototype.becomeBot = function (p, mode) {
+    // mode: 'away' (can return with the same browser or by name), 'left' (by name), 'kicked' (cannot return)
+    p.ex = mode === 'kicked' ? null : { name: p.name, claim: mode === 'away' ? p.token : null };
+    p.bot = true; p.token = null; p.connected = true; p.awayAuto = 0;
+    this.voyeurs.forEach(function (v) { if (v.peek && v.peek.pid === p.id) v.peek = null; });
+  };
+  // a voyeur sits down in a seat (hand, call and score stay as they were)
+  Game.prototype.giveSeat = function (t, v) {
+    this.voyeurs = this.voyeurs.filter(function (x) { return x.id !== v.id; });
+    this.voyeurs.forEach(function (x) { if (x.peek && x.peek.pid === t.id) x.peek = null; });
+    t.bot = false; t.ex = null; t.awayAuto = 0; delete t.level;
+    t.name = this.uniqueName(v.name, t.id);
+    t.token = v.token; t.connected = v.connected;
+  };
+  // an away player's turn is auto-played; after awayLimit in a row the seat becomes a bot
+  Game.prototype.noteAway = function (p) {
+    p.awayAuto = (p.awayAuto || 0) + 1;
+    if (p.awayAuto < this.awayLimit) return;
+    var name = p.name;
+    this.becomeBot(p, 'away');
+    if (this.hostId === p.id) this.reassignHost();
+    this.pushChat(null, '', name + ' was away for ' + this.awayLimit + ' turns, so a bot plays the seat. They can take it back', true);
+    this.emit();
+  };
+  // voyeurs who closed the page and never came back are dropped
+  Game.prototype.pruneVoyeurs = function (now) {
+    var gone = this.voyeurs.filter(function (v) { return !v.connected && v.dcAt && now - v.dcAt > 120000; });
+    if (!gone.length) return;
+    var self = this;
+    gone.forEach(function (v) { self.onKick(v.token, false); });
+    this.voyeurs = this.voyeurs.filter(function (v) { return gone.indexOf(v) < 0; });
+    this.emit();
+  };
+
   Game.prototype.setConnected = function (pid, v) {
-    var p = this.byId(pid);
+    var p = this.who(pid);
     if (!p || p.bot || p.connected === v) return;
     p.connected = v;
+    if (v) p.awayAuto = 0; else p.dcAt = Date.now();
     this.emit();
   };
 
@@ -679,15 +836,50 @@ button,[role="button"]{user-select:none;-webkit-user-select:none;-webkit-touch-c
     this.onChange();
   };
 
-  Game.prototype.reassignHost = function () {
-    var h = this.humans().filter(function (p) { return p.connected; })[0] || this.humans()[0];
+  Game.prototype.reassignHost = function (exceptId) {
+    var hs = this.humans().filter(function (p) { return p.id !== exceptId; });
+    var h = hs.filter(function (p) { return p.connected; })[0] || hs[0] || this.humans()[0];
     this.hostId = h ? h.id : null;
-    if (!h) this.closed = true;
+  };
+
+  // What a voyeur may do: watch, chat, rename, choose whose hand to ask for, and stop watching.
+  Game.prototype.voyeurAct = function (v, a) {
+    switch (a.type) {
+      case 'rename': {
+        if (!cleanName(a.name)) return { err: 'Enter a name' };
+        v.name = this.uniqueName(a.name, v.id);
+        this.emit();
+        return { ok: true };
+      }
+      case 'chat': {
+        var text = String(a.text || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+        if (!text) return { err: 'Type a message first' };
+        var now = Date.now();
+        if (v.lastChat && now - v.lastChat < 350) return { err: 'Slow down' };
+        v.lastChat = now;
+        this.pushChat(v.id, v.name, text, false, true);
+        this.emit();
+        return { ok: true };
+      }
+      case 'peek': return this.setPeek(v, a.pid);
+      case 'leave': {
+        this.voyeurs = this.voyeurs.filter(function (x) { return x.id !== v.id; });
+        this.onKick(v.token, false);
+        if (!this.humans().length && !this.voyeurs.length) this.closed = true;
+        this.emit();
+        return { ok: true };
+      }
+    }
+    return { err: 'Voyeurs can watch and chat' };
   };
 
   Game.prototype.act = function (pid, a) {
     var p = this.byId(pid);
-    if (!p || !a) return { err: 'Not in this room' };
+    if (!a) return { err: 'Not in this room' };
+    if (!p) {
+      var vy = this.voyeurById(pid);
+      return vy ? this.voyeurAct(vy, a) : { err: 'Not in this room' };
+    }
     var isHost = pid === this.hostId;
     switch (a.type) {
       case 'rename': {
@@ -733,11 +925,29 @@ button,[role="button"]{user-select:none;-webkit-user-select:none;-webkit-touch-c
         if (!isHost) return { err: 'Only the host can do that' };
         var t = this.byId(a.pid);
         if (!t || t.bot || t.id === pid) return { err: 'Cannot remove that player' };
-        this.removeHuman(t, true);
+        this.removeHuman(t, true, a.to);
         return { ok: true };
       }
       case 'leave': {
-        this.removeHuman(p, false);
+        this.removeHuman(p, false, a.to);
+        return { ok: true };
+      }
+      case 'peekreply': {   // the player a voyeur asked about says yes or no (a yes can be taken back with another no)
+        var vy2 = this.voyeurById(parseInt(a.vid, 10));
+        if (!vy2 || !vy2.peek || vy2.peek.pid !== pid) return { err: 'Not now' };
+        vy2.peek.state = a.ok ? 'ok' : 'denied';
+        this.emit();
+        return { ok: true };
+      }
+      case 'seat': {   // the host gives a bot's seat to a voyeur, between rounds
+        if (!isHost) return { err: 'Only the host can do that' };
+        if (this.phase !== 'roundover') return { err: 'Seats change hands between rounds' };
+        var sv = this.voyeurById(parseInt(a.vid, 10)), st = this.byId(parseInt(a.pid, 10));
+        if (!sv || !st || !st.bot) return { err: 'Pick a bot seat' };
+        var was = st.name;
+        this.giveSeat(st, sv);
+        this.pushChat(null, '', st.name + ' takes ' + was + '’s seat', true);
+        this.emit();
         return { ok: true };
       }
       case 'start': {
@@ -747,54 +957,99 @@ button,[role="button"]{user-select:none;-webkit-user-select:none;-webkit-touch-c
         this.begin();
         return { ok: true };
       }
-      case 'call': return this.doCall(p, a.n);
-      case 'play': return this.doPlay(p, a.card);
+      case 'call': p.awayAuto = 0; return this.doCall(p, a.n);
+      case 'play': p.awayAuto = 0; return this.doPlay(p, a.card);
       case 'next': {
         if (this.phase !== 'roundover') return { ok: true };   // someone else already dealt: nothing to do
         this.startRound(this.round.i + 1);
         return { ok: true };
       }
-      case 'again': {
+      case 'again':    // deal a new game now, same players and bots
+      case 'setup': {  // back to the lobby to add or remove players first
         if (!isHost || this.phase !== 'gameover') return { err: 'Only the host can do that' };
-        this.players = this.players.filter(function (x) { return !x.bot; });
-        this.players.forEach(function (x) { x.score = 0; x.call = null; x.made = 0; x.hand = []; });
-        this.history = []; this.round = null; this.winners = []; this.trick = []; this.led = null;
-        this.schedKey = null; this.turnEnd = null; this.played = [];
-        this.phase = 'lobby';
-        this.emit();
-        return { ok: true };
+        // the final scores stay up for a while first (a little slack for clock drift)
+        var wait = this.overAt + this.againDelayMs - Date.now();
+        if (wait > 400) return { err: 'The next game can start in ' + Math.ceil(wait / 1000) + 's' };
+        return a.type === 'again' ? this.newGame() : this.toLobby();
       }
     }
     return { err: 'Unknown action' };
   };
 
-  Game.prototype.pushChat = function (pid, name, text, sys) {
-    this.chat.push({ id: ++this.chatSeq, pid: pid, name: name, text: text, sys: !!sys });
+  // voyeurs sit down for the next game while there is room at the table
+  Game.prototype.seatVoyeurs = function () {
+    var self = this, stay = [];
+    this.voyeurs.forEach(function (v) {
+      if (self.humans().length < 8) self.players.push({ id: v.id, name: v.name, bot: false, token: v.token, connected: v.connected, score: 0, call: null, made: 0, hand: [] });
+      else { v.peek = null; stay.push(v); }
+    });
+    this.voyeurs = stay;
+    if (this.humans().length > this.size) this.size = this.humans().length;
+  };
+  Game.prototype.resetGame = function () {
+    this.players.forEach(function (x) { x.score = 0; x.call = null; x.made = 0; x.hand = []; x.awayAuto = 0; });
+    this.history = []; this.round = null; this.winners = []; this.trick = []; this.led = null; this.trickWinner = null;
+    this.schedKey = null; this.turnEnd = null; this.played = []; this.roundTricks = []; this.overAt = null;
+  };
+  // The lobby again: bots go (the lobby shows their seats), the people stay, voyeurs sit down.
+  Game.prototype.toLobby = function () {
+    this.players = this.humans();
+    this.resetGame();
+    this.seatVoyeurs();
+    this.phase = 'lobby';
+    this.emit();
+    return { ok: true };
+  };
+  // A new game at once with the same people and the same bots (voyeurs sit down; spare bots make room for them).
+  Game.prototype.newGame = function () {
+    var bots = this.players.filter(function (p) { return p.bot; });
+    this.players = this.humans();
+    this.resetGame();
+    this.seatVoyeurs();
+    this.begin(bots);
+    return { ok: true };
+  };
+
+  Game.prototype.pushChat = function (pid, name, text, sys, voy) {
+    this.chat.push({ id: ++this.chatSeq, pid: pid, name: name, text: text, sys: !!sys, voy: !!voy });
     if (this.chat.length > 80) this.chat.splice(0, this.chat.length - 80);
   };
 
-  Game.prototype.removeHuman = function (t, kicked) {
-    var token = t.token;
+  // Someone leaves, or the host removes them. In the lobby the seat just goes. In a game a connected voyeur can
+  // take it over (toVid), otherwise a bot plays it on. Hand, call and score stay with the seat.
+  Game.prototype.removeHuman = function (t, kicked, toVid) {
+    var token = t.token, name = t.name, took = false;
     if (this.phase === 'lobby') {
       this.players = this.players.filter(function (x) { return x.id !== t.id; });
     } else {
-      t.bot = true; t.token = null; t.connected = true;
+      var v = toVid != null ? this.voyeurById(parseInt(toVid, 10)) : null;
+      var what = name + (kicked ? ' was removed' : ' left');
+      if (v && v.connected) {
+        this.giveSeat(t, v); took = true;
+        this.pushChat(null, '', what + '. ' + t.name + ' takes the seat', true);
+      } else {
+        this.becomeBot(t, kicked ? 'kicked' : 'left');
+        this.pushChat(null, '', what + '. A bot plays the seat', true);
+      }
     }
-    if (this.hostId === t.id) this.reassignHost();
-    this.onKick(t.id, token, kicked);
-    if (!this.humans().length) this.closed = true;
+    if (this.hostId === t.id) this.reassignHost(took ? t.id : undefined);
+    this.onKick(token, kicked);
+    if (!this.humans().length && !this.voyeurs.length) this.closed = true;
     this.emit();
   };
 
-  Game.prototype.begin = function () {
+  // keepBots: bots from the game before, reused (so "Play again" keeps the same table)
+  Game.prototype.begin = function (keepBots) {
     var humans = this.humans();
     var n = Math.max(this.size, humans.length);
+    var want = n - humans.length;
+    var bots = (keepBots || []).slice(0, want);
     var used = {};
-    humans.forEach(function (p) { used[p.name.toLowerCase()] = 1; });
+    humans.concat(bots).forEach(function (p) { used[p.name.toLowerCase()] = 1; });
     var pool = shuffle(BOT_NAMES.slice()).filter(function (x) { return !used[x.toLowerCase()]; });
-    var bots = [];
-    for (var i = 0; i < n - humans.length; i++) {
-      bots.push({ id: this.nextId++, name: pool[i] || ('Bot ' + (i + 1)), bot: true, token: null, connected: true, score: 0, call: null, made: 0, hand: [] });
+    var kept = bots.length;
+    for (var i = kept; i < want; i++) {
+      bots.push({ id: this.nextId++, name: pool[i - kept] || ('Bot ' + (i + 1)), bot: true, token: null, connected: true, score: 0, call: null, made: 0, hand: [] });
     }
     this.players = shuffle(humans.concat(bots));
     this.players.forEach(function (p) { p.score = 0; });
@@ -820,6 +1075,15 @@ button,[role="button"]{user-select:none;-webkit-user-select:none;-webkit-touch-c
     this.turnIdx = first;
     this.trick = []; this.led = null; this.trickWinner = null;
     this.played = [];
+    this.roundTricks = [];
+    // the previous round's last hand can be looked at until lastRoundMs into this round; an update goes out when it locks
+    this.roundStartAt = Date.now();
+    clearTimeout(this.lockTimer);
+    if (this.history.length) {
+      var self = this;
+      this.lockTimer = setTimeout(function () { self.emit(); }, this.lastRoundMs + 60);
+      if (this.lockTimer && this.lockTimer.unref) this.lockTimer.unref();
+    }
     this.emit();
   };
 
@@ -866,14 +1130,15 @@ button,[role="button"]{user-select:none;-webkit-user-select:none;-webkit-touch-c
     var w = this.byId(wid);
     w.made++;
     this.trickWinner = wid;
+    this.roundTricks.push({ trick: this.trick.map(function (t) { return { pid: t.pid, card: t.card }; }), winner: wid });
     this.phase = 'trickdone';
     this.turnIdx = this.players.indexOf(w);
     this.emit();
     var self = this;
-    // After the last hand of a round the table is held longer before the Screen opens.
+    // After the last hand of a round the table is held longer (it shows every hand of the round) before the Screen opens.
     var lastHand = p.hand.length === 0;
     clearTimeout(this.ttimer);
-    this.ttimer = setTimeout(function () { self.afterTrick(); }, this.fast ? 1 : (lastHand ? 4000 : 1600));
+    this.ttimer = setTimeout(function () { self.afterTrick(); }, lastHand ? this.lastHoldMs : (this.fast ? 1 : 1600));
     return { ok: true };
   };
 
@@ -892,12 +1157,14 @@ button,[role="button"]{user-select:none;-webkit-user-select:none;-webkit-touch-c
       p.score += pts;
       res[p.id] = { call: p.call, made: p.made, pts: pts };
     });
-    this.history.push({ i: this.round.i, cards: this.round.cards, cut: this.round.cut, res: res });
+    // every hand of the round is kept with it, for the Hands won tab on the Screen
+    this.history.push({ i: this.round.i, cards: this.round.cards, cut: this.round.cut, res: res, tricks: this.roundTricks });
     this.trick = []; this.led = null; this.trickWinner = null;
     if (this.round.i >= this.per - 1) {
       var max = Math.max.apply(null, this.players.map(function (p) { return p.score; }));
       this.winners = this.players.filter(function (p) { return p.score === max; }).map(function (p) { return p.id; });
       this.phase = 'gameover';
+      this.overAt = Date.now();
     } else {
       this.phase = 'roundover';
     }
@@ -917,9 +1184,9 @@ button,[role="button"]{user-select:none;-webkit-user-select:none;-webkit-touch-c
     if (key === this.schedKey && this.timer) return;
     clearTimeout(this.timer); this.timer = null;
     this.schedKey = key; this.turnEnd = null;
-    var delay, timed = false;
+    var delay, timed = false, away = false;
     if (cur.bot) delay = this.fast ? 1 : 600 + rnd(500);
-    else if (!cur.connected) delay = this.fast ? 1 : (this.autoMs || 90000);
+    else if (!cur.connected) { delay = this.fast ? 1 : (this.autoMs || 90000); away = true; }
     else if (this.timerSec) { delay = this.timerSec * 1000 * this.timerScale; timed = true; }
     else return;
     if (timed) this.turnEnd = Date.now() + delay;
@@ -929,32 +1196,63 @@ button,[role="button"]{user-select:none;-webkit-user-select:none;-webkit-touch-c
       if (timed && self.players[self.turnIdx] === cur && !cur.bot) {
         self.pushChat(null, '', 'Time’s up for ' + cur.name + ' — played automatically', true);
       }
-      self.botAct(cur.id);
+      var played = self.botAct(cur.id);
+      // an absent player's auto-played turns are counted: awayLimit in a row hands the seat to a bot
+      if (played && away && !cur.bot && !cur.connected) self.noteAway(cur);
     }, delay);
   };
 
   Game.prototype.botAct = function (pid) {
     var cur = this.players[this.turnIdx];
-    if (!cur || cur.id !== pid) return;
+    if (!cur || cur.id !== pid) return false;
+    var r = null;
     // a human whose time ran out (or who is away) is played for at Medium, whatever the bot level is
     var level = cur.bot ? (cur.level || this.botLevel) : 'medium';
     if (this.phase === 'calling') {
       var cs = this.callState();
       var k = this.players.filter(function (p) { return p.call !== null; }).length;
       var n = Bot.call(cur.hand, this.round.cut, this.n, this.round.cards, cs.sum, cs.isLast, level, { k: k });
-      this.doCall(cur, n);
+      r = this.doCall(cur, n);
     } else if (this.phase === 'playing') {
       var c = Bot.play(cur.hand, this.led, this.trick, this.round.cut, cur.call - cur.made, level, { n: this.n, played: this.played });
-      this.doPlay(cur, c);
+      r = this.doPlay(cur, c);
     }
+    return !!(r && r.ok);
   };
 
   Game.prototype.destroy = function () {
-    clearTimeout(this.timer); clearTimeout(this.ttimer);
+    clearTimeout(this.timer); clearTimeout(this.ttimer); clearTimeout(this.lockTimer);
+  };
+
+  // The final hand of the last finished round, for the Last round tab (in case a card was missed to lag). It is
+  // open from the end of the round until lastRoundMs into the next one; after that it is not sent at all.
+  Game.prototype.lastRoundOpen = function () {
+    if (this.phase === 'lobby' || !this.history.length) return null;
+    var h = this.history[this.history.length - 1];
+    if (!h.tricks || !h.tricks.length) return null;
+    var ended = this.phase === 'roundover' || this.phase === 'gameover';
+    if (!ended && Date.now() - this.roundStartAt >= this.lastRoundMs) return null;
+    var hand = h.tricks[h.tricks.length - 1];
+    return { i: h.i, cards: h.cards, cut: h.cut, res: h.res, trick: hand.trick, winner: hand.winner, led: hand.trick[0].card[0] };
+  };
+
+  // The hands this player has won, round by round (the round under way last, with hands so far)
+  Game.prototype.winsFor = function (pid) {
+    var out = [], p = this.byId(pid);
+    this.history.forEach(function (h) {
+      var r = h.res[pid] || { call: 0, made: 0, pts: 0 };
+      out.push({ i: h.i, cards: h.cards, cut: h.cut, done: true, call: r.call, made: r.made, pts: r.pts,
+        hands: (h.tricks || []).filter(function (t) { return t.winner === pid; }) });
+    });
+    if (this.round && this.round.i >= this.history.length && this.phase !== 'lobby' && this.phase !== 'gameover') {
+      out.push({ i: this.round.i, cards: this.round.cards, cut: this.round.cut, done: false, call: p ? p.call : null, made: p ? p.made : 0, pts: 0,
+        hands: this.roundTricks.filter(function (t) { return t.winner === pid; }) });
+    }
+    return out;
   };
 
   Game.prototype.snapshot = function (pid) {
-    var me = this.byId(pid);
+    var me = this.byId(pid), vy = me ? null : this.voyeurById(pid);
     var inGame = this.phase !== 'lobby';
     var humans = this.humans();
     var n = inGame ? this.n : Math.max(this.size, humans.length);
@@ -966,9 +1264,18 @@ button,[role="button"]{user-select:none;-webkit-user-select:none;-webkit-touch-c
       size: this.size, n: n, per: per, removed: 52 - n * per,
       botCount: inGame ? this.players.filter(function (p) { return p.bot; }).length : n - humans.length,
       players: this.players.map(function (p) {
-        return { id: p.id, name: p.name, bot: p.bot, connected: p.connected, call: p.call, made: p.made, score: p.score };
+        return { id: p.id, name: p.name, bot: p.bot, connected: p.connected, call: p.call, made: p.made, score: p.score, ex: !!p.ex };
       }),
-      history: this.history, round: this.round, turn: turn, led: this.led,
+      voyeur: !!vy, meName: me ? me.name : (vy ? vy.name : ''),
+      voyeurs: this.voyeurs.map(function (v) {
+        return { id: v.id, name: v.name, connected: v.connected, peek: v.peek ? { pid: v.peek.pid, state: v.peek.state } : null };
+      }),
+      // the score lines only; every hand of every round stays on the server and is sent as `wins` (the player's own)
+      history: this.history.map(function (h) { return { i: h.i, cards: h.cards, cut: h.cut, res: h.res }; }),
+      lastRound: this.lastRoundOpen(),
+      againIn: this.phase === 'gameover' ? Math.max(0, this.overAt + this.againDelayMs - Date.now()) : null,
+      wins: null,
+      round: this.round, turn: turn, led: this.led,
       trick: this.trick, trickWinner: this.trickWinner, winners: this.winners,
       hand: me && inGame ? me.hand : [], legal: [], callInfo: null,
       timerSec: this.timerSec, botLevel: this.botLevel, seq: this.seq,
@@ -977,6 +1284,20 @@ button,[role="button"]{user-select:none;-webkit-user-select:none;-webkit-touch-c
     };
     if (me && this.phase === 'playing' && turn === pid) s.legal = legalCards(me.hand, this.led);
     if (me && this.phase === 'calling' && turn === pid) s.callInfo = this.callState();
+    // Hands won: the player's own, every round. A voyeur gets them for the player whose hand they may see.
+    var wt = me || (vy && vy.peek && vy.peek.state === 'ok' ? this.byId(vy.peek.pid) : null);
+    if (wt && inGame) s.wins = this.winsFor(wt.id);
+    if (vy) {
+      // A voyeur sees the table. A hand only comes with it once that player has said yes.
+      s.peek = null;
+      if (vy.peek) {
+        var tp = this.byId(vy.peek.pid);
+        if (tp) {
+          s.peek = { pid: tp.id, name: tp.name, state: vy.peek.state };
+          if (vy.peek.state === 'ok' && inGame) s.hand = tp.hand;
+        }
+      }
+    }
     return s;
   };
 
@@ -996,7 +1317,7 @@ var E=window.JEngine;
 var SY={S:'♠︎',H:'♥︎',C:'♣︎',D:'♦︎'},SN=E.SUIT_NAME,RL={11:'J',12:'Q',13:'K',14:'A'};
 var FS=[15,16,17.5,19],FSN=['Small','Normal','Large','Larger'];
 var FRIEND_LINES=['bold call 👀','who has the ace of cut?','wah, nice hand','I am never calling 0 again','this round is cursed','haha','okay okay','gg'];
-var QUICK=['wah!','bold call','oops','gg','😅','👏'];
+var QUICK=['wah!','bold call','gg','kaled','today','sick','😂','👏'];
 
 function $(s){return document.querySelector(s)}
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
@@ -1008,6 +1329,9 @@ ui.v2=1;if(!ui.theme||ui.theme==='auto')ui.theme='paper';   // no "match phone":
 var setup=load('jn_setup',{name:'',size:5,level:'medium',timer:0});
 var scHidden=false,game=null,me=null,snap=null,sel=null,sheet=null,chatSeen=0,turnDeadline=null,errMsg='',popT=null;
 var anim={trick:{},made:{},calls:{},circled:'',rows:{}},firstHome=true;
+// joinOffer: a started game's code was typed (watch it, or take a seat back). screenTab: Scores, Hands won or Last round on the Screen.
+// handover: someone leaving (or being removed) picks who takes the seat. seatPick: the voyeur the host is giving a seat to.
+var joinOffer=null,screenTab='scores',handover=null,seatPick=null,againDeadline=null;
 
 function applyUI(){
   var h=document.documentElement;
@@ -1092,7 +1416,7 @@ function freshLocal(code){
   if(game)game.destroy();clearDemo();
   isLocal=true;seq=-1;scHidden=false;seenJoin={};
   anim={trick:{},made:{},calls:{},circled:'',rows:{}};sel=null;sheet=null;chatSeen=0;snap=null;
-  game=new E.Game(code);game.autoMs=900;
+  game=new E.Game(code);game.autoMs=900;game.againDelayMs=0;
 }
 function demoCode(){var A='ABCDEFGHJKMNPQRSTUVWXYZ',c='';for(var i=0;i<4;i++)c+=A[Math.floor(Math.random()*A.length)];return c}
 function demoArrive(name,ms){
@@ -1130,7 +1454,7 @@ function startGame(){
   if(game)game.destroy();clearDemo();
   isLocal=true;seq=-1;scHidden=false;
   anim={trick:{},made:{},calls:{},circled:'',rows:{}};sel=null;sheet=null;chatSeen=0;
-  game=new E.Game('DEMO');game.autoMs=900;
+  game=new E.Game('DEMO');game.autoMs=900;game.againDelayMs=0;
   me=game.addHuman(nm,'me').pid;
   game.size=4;game.timerSec=setup.timer;game.botLevel=setup.level;
   game.onChange=function(){
@@ -1172,7 +1496,7 @@ function pingNow(){
 setInterval(function(){if(sheet==='settings')pingNow()},5000);
 function dropToHome(msg){
   if(es){try{es.close()}catch(x){}es=null}
-  stopPoll();saveSess(null);snap=null;sheet=null;sel=null;seq=-1;lastSse=0;optimisticAt=0;conn='ok';pendingKick=null;$('#pop').innerHTML='';firstHome=true;
+  stopPoll();saveSess(null);snap=null;sheet=null;sel=null;seq=-1;lastSse=0;optimisticAt=0;conn='ok';pendingKick=null;joinOffer=null;handover=null;seatPick=null;$('#pop').innerHTML='';firstHome=true;
   if(msg)toast(msg);render();
 }
 // ask the server for the current state (after a stall, on waking, or as the polling fallback)
@@ -1278,11 +1602,42 @@ function join(){
   if(!n){errMsg='Write your name on the line first';render();return}
   if(!c){errMsg='Enter the 4-letter room code to join';render();return}
   if(DEMO){if(!/^[A-Z]{4}$/.test(c)){errMsg='Room codes are 4 letters';render();return}demoJoin(c);return}
-  api('/api/join',{code:c,name:n}).then(function(r){if(r.err){errMsg=r.err;render();return}enter(r)}).catch(function(){errMsg='Could not reach the server. Check your connection and try again.';render()});
+  joinOffer=null;
+  api('/api/join',{code:c,name:n}).then(function(r){
+    // the game is already under way: offer to watch it (or to take back a seat that was theirs)
+    if(r.started){joinOffer={code:c,name:n,players:r.players||[],claim:!!r.claim,full:!!r.full,peek:null};errMsg='';render();return}
+    if(r.err){errMsg=r.err;render();return}
+    enter(r);
+  }).catch(offerFail);
 }
-function leave(){
+function offerFail(){errMsg='Could not reach the server. Check your connection and try again.';render()}
+function watchRoom(){
+  var o=joinOffer;if(!o)return;
+  var n=readName()||o.name;
+  api('/api/watch',{code:o.code,name:n,peek:o.peek}).then(function(r){
+    joinOffer=null;
+    if(r.err){errMsg=r.err;render();return}
+    enter(r);
+  }).catch(offerFail);
+}
+function claimSeat(){
+  var o=joinOffer;if(!o)return;
+  api('/api/claim',{code:o.code,name:o.name}).then(function(r){
+    joinOffer=null;
+    if(r.err){errMsg=r.err;render();return}
+    enter(r);
+  }).catch(offerFail);
+}
+function liveVoyeurs(){return ((snap&&snap.voyeurs)||[]).filter(function(v){return v.connected})}
+// Leaving a game that is under way: if voyeurs are watching, the leaver picks who takes the seat (a bot, or one of them).
+function askLeave(){
+  var s=snap;
+  if(s&&!s.voyeur&&s.phase!=='lobby'&&s.phase!=='gameover'&&liveVoyeurs().length){handover={kind:'leave'};sheet='handover';render();return}
+  leave();
+}
+function leave(to){
   if(isLocal){clearDemo();if(game)game.destroy();game=null;isLocal=false;snap=null;sheet=null;sel=null;$('#pop').innerHTML='';firstHome=true;render();return}
-  if(sess){var b={code:sess.code,token:sess.token,a:{type:'leave'}};api('/api/act',b,4000).catch(function(){})}
+  if(sess){var b={code:sess.code,token:sess.token,a:{type:'leave',to:to==null?null:to}};api('/api/act',b,4000).catch(function(){})}
   dropToHome();
 }
 function tryRejoin(){
@@ -1309,7 +1664,15 @@ function onSnap(s){
   me=s.me;
   var prev=snap;
   if(autoStart&&!isLocal&&s.phase==='lobby'&&s.host===s.me){autoStart=false;setTimeout(function(){act({type:'size',size:4});setTimeout(function(){act({type:'start'})},250)},50)}
-  if(prev&&prev.phase==='lobby'&&s.phase!=='lobby'){anim={trick:{},made:{},calls:{},circled:'',rows:{}};scHidden=false}
+  if(prev&&(prev.phase==='lobby'||prev.phase==='gameover')&&s.phase!=='lobby'&&s.phase!=='gameover'){anim={trick:{},made:{},calls:{},circled:'',rows:{}};scHidden=false}
+  againDeadline=s.againIn==null?null:Date.now()+s.againIn;
+  if(prev&&prev.phase!=='roundover'&&s.phase==='roundover')screenTab='scores';
+  // voyeur news: a hand answered, or a seat handed over
+  if(prev&&prev.voyeur&&!s.voyeur)toast('You have a seat at the table now');
+  if(prev&&s.voyeur&&s.peek&&(!prev.peek||prev.peek.pid!==s.peek.pid||prev.peek.state!==s.peek.state)){
+    if(s.peek.state==='ok')toast(s.peek.name+' lets you see their hand');
+    else if(s.peek.state==='denied')toast(s.peek.name+' said no. Table view only');
+  }
   if(sel&&(s.hand.indexOf(sel)<0||s.phase!=='playing'||s.turn!==s.me||s.legal.indexOf(sel)<0))sel=null;
   if(!sel&&s.phase==='playing'&&s.turn===s.me&&s.legal.length===1)sel=s.legal[0];
   turnDeadline=s.turnLeft==null?null:Date.now()+s.turnLeft;
@@ -1326,7 +1689,7 @@ function showPop(m){
   var box=$('#pop'),ph=snap&&snap.phase;
   box.className=(ph==='roundover'||ph==='gameover'||ph==='lobby')?'low':'';
   var el=document.createElement('div');el.className='note-pop';el.setAttribute('data-a','chat');el.setAttribute('role','status');
-  el.innerHTML='<b>'+esc(m.name)+'</b>'+esc(m.text);
+  el.innerHTML='<b>'+esc(m.name)+(m.voy?' · voyeur':'')+'</b>'+esc(m.text);
   box.appendChild(el);while(box.children.length>3)box.removeChild(box.firstChild);
   setTimeout(function(){if(el.parentNode)el.parentNode.removeChild(el)},5500);
 }
@@ -1340,6 +1703,18 @@ function chipsHTML(list,cur,act,disabled){
 var VLINE='<div class="vline">v2 · Ishan Atul’s render</div>';
 var LEVELS=[['easy','Easy'],['medium','Medium'],['hard','Hard']],TIMERS=[[0,'Off'],[30,'30 s'],[45,'45 s'],[60,'1 min'],[120,'2 min']];
 var homeFw=null;
+// the code typed on Join belongs to a game that has started: watch it, or take a seat back
+function offerHTML(){
+  var o=joinOffer;if(!o)return '';
+  var chips='<button class="chip'+(o.peek==null?' on':'')+'" data-a="offerpeek" data-v="" aria-pressed="'+(o.peek==null)+'">Table only</button>'
+    +o.players.map(function(p){return '<button class="chip'+(o.peek===p.id?' on':'')+'" data-a="offerpeek" data-v="'+p.id+'" aria-pressed="'+(o.peek===p.id)+'">'+esc(p.name)+'’s hand</button>'}).join('');
+  return '<div class="offer" role="group" aria-label="That game has already started"><p class="ink">Room '+esc(o.code)+' has already started.</p>'
+    +(o.claim?'<button class="btn pri wide" data-a="claim">Take back my seat as '+esc(o.name)+'</button><p class="pr">Or watch it instead.</p>':'')
+    +(o.full?'<p class="err" role="alert">That room already has 10 voyeurs.</p>'
+      :'<span class="pr">Watch the table, or ask to see one player’s hand (they say yes or no).</span><div class="chips">'+chips+'</div>'
+       +'<button class="btn wide'+(o.claim?'':' pri')+'" data-a="watch">Join as a voyeur</button>')
+    +'<button class="linkish" data-a="offerno">Cancel</button></div>';
+}
 function renderHome(){
   var anim0=firstHome;
   var cards=['S14','H13','D12','C11','S10'],q='';
@@ -1356,7 +1731,7 @@ function renderHome(){
    +'<label class="fl"><span class="pr">Your name</span><input id="nm" class="line-in" maxlength="16" autocomplete="off" placeholder="write it here" value="'+esc(setup.name)+'"></label>'
    +(errMsg?'<div class="err" role="alert">'+esc(errMsg)+'</div>':'');
   h+='<button class="btn pri wide" data-a="start">Start a room</button>';
-  h+='<div class="fl" style="margin-top:calc(var(--lh)*.5)"><span class="pr">Or join a friend’s room</span><div class="cform"><input id="rc" class="line-in code-in" maxlength="4" autocomplete="off" autocapitalize="characters" placeholder="code" value="'+esc(q)+'"><button class="btn" data-a="join">Join</button></div></div>'
+  h+='<div class="fl" style="margin-top:calc(var(--lh)*.5)"><span class="pr">Or join a friend’s room</span><div class="cform"><input id="rc" class="line-in code-in" maxlength="4" autocomplete="off" autocapitalize="characters" placeholder="code" value="'+esc(joinOffer?joinOffer.code:q)+'"><button class="btn" data-a="join">Join</button></div></div>'+offerHTML()
    +(DEMO?'<p class="pr foot">Demo: friends are played by the computer. Any 4-letter code joins Atul’s room.</p>':'')
    +'<button class="btn wide" data-a="autostart" style="margin-top:calc(var(--lh)*.5)">Auto start with bots · 4 players</button>'
    +'</div></div></main>';
@@ -1414,9 +1789,23 @@ function lookHTML(){
    +'<h3>Game screen</h3>'+chipsHTML([['fit','Fit to screen'],['scroll','Scrolling']],ui.layout==='scroll'?'scroll':'fit','layout')
    +'<p class="pr" style="margin-top:.3rem;max-width:34ch">If any cards or buttons are cut off on your phone, choose Scrolling. Your cards and the calling numbers stay pinned at the bottom while the table scrolls.</p>';
 }
+function voyeursHTML(s,isHost){
+  var h='<h3>Voyeurs</h3>',between=s.phase==='roundover',bots=s.players.some(function(p){return p.bot});
+  s.voyeurs.forEach(function(v){
+    var note='',t=v.peek&&s.players.filter(function(p){return p.id===v.peek.pid})[0],hand=t?(t.id===s.me?'your':esc(t.name)+'’s')+' hand':'';
+    if(t)note=v.peek.state==='ok'?'sees '+hand:v.peek.state==='pending'?'asked to see '+hand:'table only';
+    var btns=(t&&t.id===s.me&&v.peek.state==='ok'?'<button class="btn sm" data-a="peekno" data-v="'+v.id+'">Stop</button>':'')
+     +(isHost&&between&&bots?'<button class="btn sm" data-a="seatask" data-v="'+v.id+'">Give a seat</button>':'');
+    h+='<div class="lrow vrow"><span class="dot'+(v.connected?' on':'')+'" aria-hidden="true"></span><span class="nm'+(v.id===s.me?' me':'')+'">'+esc(v.name)+(v.id===s.me?' (you)':'')+'</span><span class="pr">'+note+'</span>'
+     +(btns?'<span class="vbtn">'+btns+'</span>':'')+'</div>';
+  });
+  if(isHost)h+='<p class="pr">'+(between?'Give a voyeur a bot’s seat now. ':'A bot’s seat can go to a voyeur between rounds. ')+'Anyone who leaves can hand their seat to a voyeur.</p>';
+  return h;
+}
 function tableHTML(){
   var s=snap,isHost=isLocal?s.host===s.me:s.host===s.me,lobby=s.phase==='lobby',bots=s.botCount,total=s.n;
   var h='<h3>Players'+(isHost?'':' · only the host can remove players')+'</h3>'+playersHTML(s,isHost);
+  if(s.voyeurs&&s.voyeurs.length)h+=voyeursHTML(s,isHost);
   if(!lobby&&isHost)h+='<p class="pr">A bot takes over a removed player’s seat.</p>';
   h+='<h3>Bots</h3>';
   if(lobby)h+='<div class="stepper"><button class="btn sm" data-a="lsize" data-d="-1" '+(!isHost||total<=3||bots<=0?'disabled':'')+' aria-label="Remove a bot">−</button><span class="ink">'+bots+' bot'+(bots===1?'':'s')+' · '+total+' players</span><button class="btn sm" data-a="lsize" data-d="1" '+(!isHost||total>=8?'disabled':'')+' aria-label="Add a bot">+</button></div>';
@@ -1498,7 +1887,7 @@ function suggestion(){
 }
 function padHTML(){
   var s=snap,r=s.round;
-  if(s.phase==='roundover'){var lr=s.history[s.history.length-1];return '<div class="pad" style="display:flex;gap:.5rem"><button class="btn" data-a="showsc">The Screen</button><button class="btn pri" style="flex:1" data-a="next">Deal round '+(lr.i+2)+'</button></div>'}
+  if(s.phase==='roundover'){var lr=s.history[s.history.length-1];return '<div class="pad" style="display:flex;gap:.5rem"><button class="btn" data-a="showsc">The Screen</button>'+(s.voyeur?'':'<button class="btn pri" style="flex:1" data-a="next">Deal round '+(lr.i+2)+'</button>')+'</div>'}
   if(!(s.phase==='calling'&&s.turn===s.me&&s.callInfo))return statusHTML();
   var f=s.callInfo.forbidden,sug=null;
   var h='<div class="pad"><div class="q">How many hands will you make?</div><div class="nums">';
@@ -1542,7 +1931,7 @@ function fillTable(){
   var lead=s.trick.length?s.trick[0].pid:s.turn,start=0;
   s.players.forEach(function(p,i){if(p.id===lead)start=i});
   var order2=s.players.slice(start).concat(s.players.slice(0,start));
-  var key=r.i+':'+s.history.length+':'+(r.cards-s.players.filter(function(p){return p.id===s.me})[0].made)+':'+s.trick.map(function(t){return t.card}).join('');
+  var key=r.i+':'+s.history.length+':'+(r.cards-(s.players.filter(function(p){return p.id===s.me})[0]||{made:0}).made)+':'+s.trick.map(function(t){return t.card}).join('');
   var circleNow=s.phase==='trickdone'&&anim.circled!==key;
   var h='<div class="slots" style="width:'+Math.min(tb.clientWidth,L.per*(tw+12))+'px">';
   order2.forEach(function(p){
@@ -1565,12 +1954,12 @@ function fillTable(){
 }
 function handHTML(W){
   var s=snap,hand=s.hand,n=hand.length;
-  if(!n)return '<div class="hand" style="min-height:3rem"></div>';
+  if(!n)return s.voyeur?'<div class="hand" style="min-height:0;padding-top:0"></div>':'<div class="hand" style="min-height:3rem"></div>';
   var GAP=5,SG=7,groups=0,hcap=Math.max(56,Math.min(96,Math.round(innerHeight*.105)));
   var w=Math.min(hcap,Math.max(Math.round(W*.2),Math.floor((W-(n-1)*GAP)/n))),hh=Math.round(w*1.4);
   hand.forEach(function(c,i){if(i&&c[0]!==hand[i-1][0])groups++});
   var step=(n*w+(n-1)*GAP+groups*SG<=W)?w+GAP:(W-w-groups*SG)/(n-1);
-  var myTurn=s.phase==='playing'&&s.turn===s.me,h='<div class="hand" id="hand" role="group" aria-label="Your hand">';
+  var myTurn=s.phase==='playing'&&s.turn===s.me,h='<div class="hand" id="hand" role="group" aria-label="'+(s.voyeur&&s.peek?esc(s.peek.name)+'’s hand':'Your hand')+'">';
   hand.forEach(function(c,i){
     var ok=myTurn&&s.legal.indexOf(c)>=0,no=myTurn&&!ok;
     var ml=i?Math.round(step-w+((c[0]!==hand[i-1][0])?SG:0)):0;
@@ -1600,6 +1989,22 @@ function fitCheck(){
     fitGuard=true;autoScroll=true;applyScreen();toast('Switched to a scrolling screen so your cards stay visible');renderGame();fitGuard=false;
   }
 }
+// A voyeur's strip above the cards: what they are watching, and a button to ask for someone's hand.
+function voyeurBarHTML(){
+  var s=snap;if(!s.voyeur)return '';
+  var pk=s.peek,t='Voyeur · watching the table';
+  if(pk){
+    if(pk.state==='ok')t='Voyeur · you can see <b>'+esc(pk.name)+'</b>’s hand';
+    else if(pk.state==='pending')t='Voyeur · waiting for <b>'+esc(pk.name)+'</b> to say yes…';
+    else t='Voyeur · '+esc(pk.name)+' said no, so table only';
+  }
+  return '<div class="vybar"><span class="grow">'+t+'</span><button class="btn sm" data-a="peeksheet">Whose hand?</button></div>';
+}
+// The deal button after a round. A voyeur can't deal, so they wait.
+function dealHTML(lr){
+  if(snap.voyeur)return '<div class="deal"><p class="wait">Waiting for a player to deal round '+(lr.i+2)+'<i>.</i><i>.</i><i>.</i></p></div>';
+  return '<div class="deal"><button class="btn pri wide" data-a="next">Deal round '+(lr.i+2)+' · '+(lr.cards-1)+' card'+(lr.cards-1>1?'s':'')+'</button></div>';
+}
 function renderGame(){
   var s=snap,app=$('#app'),onScreen=s.phase==='roundover'&&!scHidden;
   app.className='game'+(onScreen?' sc':'');
@@ -1607,10 +2012,10 @@ function renderGame(){
   if(wideLayout()&&!onScreen)W=Math.max(240,(W-1.2*rootPx())/2);   // landscape: the hand has the right-hand column
   if(s.phase==='roundover'&&!scHidden){
     var lr=s.history[s.history.length-1];
-    app.innerHTML=headerHTML()+'<section class="insc" aria-label="The Screen"><h2 class="ink">The Screen <span class="pr">after round '+(lr.i+1)+'</span><button class="btn sm" data-a="hidesc" style="margin-left:auto">Hide</button></h2>'+screenHTML()+roundSummary()+'<div class="deal"><button class="btn pri wide" data-a="next">Deal round '+(lr.i+2)+' · '+(lr.cards-1)+' card'+(lr.cards-1>1?'s':'')+'</button></div></section>';
+    app.innerHTML=headerHTML()+'<section class="insc" aria-label="The Screen"><h2 class="ink">The Screen <span class="pr">after round '+(lr.i+1)+'</span><button class="btn sm" data-a="hidesc" style="margin-left:auto">Hide</button></h2>'+screenTabsHTML()+screenBodyHTML()+roundSummary()+dealHTML(lr)+'</section>';
     var sw=app.querySelector('#scw'),lrow=sw&&sw.querySelector('#lastrow');if(lrow)sw.scrollTop=Math.max(0,lrow.offsetTop-sw.clientHeight*.55);
   }else{
-  app.innerHTML=headerHTML()+ledgerHTML()+'<div class="table" id="tbl"></div><div class="dock">'+padHTML()+handHTML(W)+playbarHTML()+'</div>';
+  app.innerHTML=headerHTML()+ledgerHTML()+'<div class="table" id="tbl"></div><div class="dock">'+voyeurBarHTML()+padHTML()+handHTML(W)+playbarHTML()+'</div>';
   fillTable();
   fitCheck();
   }
@@ -1662,10 +2067,67 @@ function screenHTML(full){
   s.players.forEach(function(p){h+='<td>'+p.score+'</td>'});
   return h+'</tr></tfoot></table></div>';
 }
+// Scores | Hands won | Last round, above the Screen.
+// Hands won: every hand the player has taken, round by round, newest first (a voyeur gets it for the player whose hand
+// they may see; without that it is greyed out). Last round: the final hand of the last finished round, open until 45 s
+// into the next round, then locked (the game stops sending it).
+function effTab(){
+  if(screenTab==='hands'&&Array.isArray(snap.wins))return 'hands';
+  if(screenTab==='last'&&snap.lastRound)return 'last';
+  return 'scores';
+}
+function screenTabsHTML(){
+  var t=effTab(),hasW=Array.isArray(snap.wins),hasL=!!snap.lastRound;
+  function tab(k,label,on,title){return '<button class="chip'+(t===k?' on':'')+'" role="tab" '+(on?'data-a="stab" data-v="'+k+'"':'disabled title="'+title+'"')+' aria-selected="'+(t===k)+'">'+label+'</button>'}
+  return '<div class="chips tabs" role="tablist" aria-label="Screen view">'
+   +tab('scores','Scores',true,'')
+   +tab('hands','Hands won',hasW,'Ask to see a player’s hand to see their hands won')
+   +tab('last','Last round',hasL,snap.history.length?'Locked: it closes 45 seconds into the next round':'There is no earlier round yet')+'</div>';
+}
+function screenBodyHTML(){var t=effTab();return t==='hands'?handsWonHTML():t==='last'?lastRoundHTML():screenHTML()}
+function handsWonHTML(){
+  var s=snap,rounds=s.wins.slice().sort(function(a,b){return b.i-a.i}),n=s.players.length,W=Math.min(innerWidth,480)-56;
+  var tw=Math.max(24,Math.min(44,Math.floor(W/n)-6)),th=Math.round(tw*1.4);
+  var who=s.voyeur&&s.peek?s.peek.name:'You',total=rounds.reduce(function(a,r){return a+r.hands.length},0);
+  if(!rounds.length)return '<div class="hwon"><p class="pr">No hands won yet.</p></div>';
+  var h='<div class="hwon"><div class="pr">'+(s.voyeur?esc(who)+'’s hands, ':'Your hands, ')+'every round, newest first · '+total+' won so far</div>';
+  rounds.forEach(function(r){
+    var cut=r.cut?'<span class="sy'+(isRed(r.cut)?' r':'')+'">'+SY[r.cut]+'</span> ':'';
+    var tag=r.done?(r.made+' of '+r.call+(r.made===r.call?' · +'+r.pts:'')):(r.call===null?'calling':r.made+' of '+r.call+' so far');
+    h+='<section class="hw-r"><h4 class="ink">Round '+(r.i+1)+' <span class="pr">'+cut+r.cards+' card'+(r.cards>1?'s':'')+' · '+tag+'</span></h4>';
+    if(!r.hands.length)h+='<p class="pr">No hands won</p>';
+    r.hands.forEach(function(hd){
+      h+='<div class="hw-h">';
+      hd.trick.forEach(function(t){
+        h+='<div class="hw-c">'+cardHTML(t.card,{w:tw,h:th,cls:t.pid===hd.winner?'won':''})+'<span class="hw-n">'+esc(nameOf(t.pid))+'</span></div>';
+      });
+      h+='</div>';
+    });
+    h+='</section>';
+  });
+  return h+'</div>';
+}
+function lastRoundHTML(){
+  var s=snap,lr=s.lastRound,n=lr.trick.length,per=n>4?Math.ceil(n/2):n,W=Math.min(innerWidth,480)-56;
+  var tw=Math.max(34,Math.min(70,Math.floor(W/per)-12)),th=Math.round(tw*1.4),cut=lr.cut;
+  var h='<div class="lastr"><div class="lr-t ink">Round '+(lr.i+1)+' · the final hand</div>'
+   +'<div class="pr">'+(cut?'<span class="sy'+(isRed(cut)?' r':'')+'">'+SY[cut]+'</span> '+SN[cut]+' cut':'No cut that round')+' · '+(lr.winner===s.me?'You take':esc(nameOf(lr.winner))+' takes')+' it</div>'
+   +'<div class="slots" style="width:'+Math.min(W,per*(tw+12))+'px">';
+  lr.trick.forEach(function(t,i){
+    var res=lr.res[t.pid]||{call:0,made:0,pts:0},win=lr.winner===t.pid,hit=res.made===res.call,tag='';
+    if(i===0)tag='<span class="tg">led</span>';
+    else if(cut&&lr.led&&cut!==lr.led&&t.card[0]===cut)tag='<span class="tg cut">cut!</span>';
+    h+='<div class="slot'+(win?' win':'')+(t.pid===s.me?' me':'')+'" style="width:'+(tw+12)+'px">'+tag
+      +cardHTML(t.card,{w:tw,h:th,r:rotOf(t.card)})
+      +(win?'<svg class="circ pen" style="left:-2px;top:-10px;width:'+(tw+16)+'px;height:'+(th+20)+'px" viewBox="0 0 '+(tw+16)+' '+(th+20)+'" preserveAspectRatio="none" aria-hidden="true"><path pathLength="1" style="stroke-width:2.4" d="'+loopPath(tw+16,th+20,hash(t.card))+'"/></svg>':'')
+      +'<div class="sn">'+esc(nameOf(t.pid))+'</div><div class="pr lrr '+(hit?'ok':'miss')+'">'+res.made+' of '+res.call+(hit?' · +'+res.pts:'')+'</div></div>';
+  });
+  return h+'</div><p class="pr" style="text-align:center;margin-top:calc(var(--lh)*.6)">Open until 45 seconds into the next round.</p></div>';
+}
 function roundSummary(){
   var s=snap,last=s.history[s.history.length-1],x=last.res[s.me];
   var made=s.players.filter(function(p){return last.res[p.id].made===last.res[p.id].call}).map(function(p){return p.id===s.me?'you':p.name});
-  var mine=x.made===x.call?'You made your '+x.call+': <b>+'+x.pts+'</b>.':'<span class="miss">You called '+x.call+' and made '+x.made+': nothing this round.</span>';
+  var mine=!x?'':x.made===x.call?'You made your '+x.call+': <b>+'+x.pts+'</b>.':'<span class="miss">You called '+x.call+' and made '+x.made+': nothing this round.</span>';
   return '<div class="sumline">'+mine+' '+(made.length?'Made it: '+esc(made.join(', '))+'.':'Nobody made their call!')+'</div>';
 }
 // Back button / back swipe closes the open panel (Settings, chat, Screen, rules) before it leaves the page.
@@ -1693,14 +2155,14 @@ function renderSheet(){
     var last=s.history[s.history.length-1];
     h='<div class="scrim"'+(auto?'':' data-a="close"')+'><section class="sheet full" role="dialog" aria-label="The Screen" data-stop>'
      +'<div class="sh-hd"><h2>The Screen'+(auto?' <span class="pr" style="font-family:var(--print)">after round '+(last.i+1)+'</span>':'')+'</h2>'+(auto?'':'<button class="ib" data-a="close" aria-label="Close">'+ICON.close+'</button>')+'</div>'
-     +screenHTML()
+     +screenTabsHTML()+screenBodyHTML()
      +(auto?roundSummary()+'<div class="deal"><button class="btn pri wide" data-a="next">Deal round '+(last.i+2)+' · '+(last.cards-1)+' card'+(last.cards-1>1?'s':'')+'</button></div>':'')
      +'</section></div>';
   }else if(sheet==='chat'){
     var msgs='';
     s.chat.forEach(function(m){
       if(m.sys)msgs+='<p class="msg sys">'+esc(m.text)+'</p>';
-      else msgs+='<p class="msg'+(m.pid===s.me?' mine':'')+'"><b>'+esc(m.pid===s.me?'You':m.name)+':</b> '+esc(m.text)+'</p>';
+      else msgs+='<p class="msg'+(m.pid===s.me?' mine':'')+'"><b>'+esc(m.pid===s.me?'You':m.name)+(m.voy?' <i class="vy">voyeur</i>':'')+':</b> '+esc(m.text)+'</p>';
     });
     h='<div class="scrim" data-a="close"><section class="sheet" role="dialog" aria-label="Table chat" data-stop>'
      +'<div class="sh-hd"><h2>Table chat</h2><button class="ib" data-a="close" aria-label="Close">'+ICON.close+'</button></div>'
@@ -1714,13 +2176,38 @@ function renderSheet(){
     if(s){
       var mp=player(s.me);
       h+=tableHTML();
-      if(!isLocal&&mp)h+='<h3>Your name</h3><div class="cform"><input id="rn" class="line-in" maxlength="16" value="'+esc(mp.name)+'"><button class="btn" data-a="rename">Save</button></div>';
+      if(!isLocal&&(mp||s.voyeur))h+='<h3>Your name</h3><div class="cform"><input id="rn" class="line-in" maxlength="16" value="'+esc(s.meName||mp.name)+'"><button class="btn" data-a="rename">Save</button></div>';
       if(!isLocal)h+='<h3>Connection</h3><p class="pr" id="connst">'+connText()+'</p>';
     }else h+=lookHTML();
     h+='<h3>How to play</h3><p><button class="btn" data-a="rules">Read the rules</button></p>';
-    if(s)h+='<h3>'+(s.phase==='lobby'?'This room':'This game')+'</h3><p><button class="btn red" data-a="home">Leave the '+(s.phase==='lobby'?'room':'table')+'</button></p>';
+    if(s)h+='<h3>'+(s.phase==='lobby'?'This room':'This game')+'</h3><p><button class="btn red" data-a="home">'+(s.voyeur?'Stop watching':'Leave the '+(s.phase==='lobby'?'room':'table'))+'</button></p>';
     h+=''
      +'<p style="margin-top:var(--lh)"><button class="btn pri wide" data-a="close">Done</button></p></section></div>';
+  }else if(sheet==='handover'&&handover&&s){
+    // someone is leaving (or being removed) mid-game: who takes the seat?
+    var hwho=handover.kind==='kick'?((player(handover.pid)||{name:'that player'}).name)+'’s':'your';
+    h='<div class="scrim" data-a="close"><section class="sheet" role="dialog" aria-label="Who takes the seat" data-stop>'
+     +'<div class="sh-hd"><h2>Who takes '+esc(hwho)+' seat?</h2><button class="ib" data-a="close" aria-label="Close">'+ICON.close+'</button></div>'
+     +'<p class="pr">The hand, the call and the score stay with the seat.</p><div class="stack">'
+     +'<button class="btn pri wide" data-a="hand" data-v="">A bot</button>'
+     +liveVoyeurs().map(function(v){return '<button class="btn wide" data-a="hand" data-v="'+v.id+'">'+esc(v.name)+' <span class="vy">voyeur</span></button>'}).join('')
+     +'</div></section></div>';
+  }else if(sheet==='peek'&&s){
+    // a voyeur picks whose hand to ask for
+    h='<div class="scrim" data-a="close"><section class="sheet" role="dialog" aria-label="Whose hand" data-stop>'
+     +'<div class="sh-hd"><h2>Whose hand?</h2><button class="ib" data-a="close" aria-label="Close">'+ICON.close+'</button></div>'
+     +'<p class="pr">They get to say yes or no. Bots have no one to ask, so they stay on the table view.</p><div class="stack">'
+     +'<button class="btn wide'+(s.peek?'':' pri')+'" data-a="peek" data-v="">The table only</button>'
+     +s.players.filter(function(p){return !p.bot}).map(function(p){var on=s.peek&&s.peek.pid===p.id;return '<button class="btn wide'+(on?' pri':'')+'" data-a="peek" data-v="'+p.id+'">'+esc(p.name)+'’s hand'+(on&&s.peek.state==='pending'?' · asking…':'')+'</button>'}).join('')
+     +'</div></section></div>';
+  }else if(sheet==='seat'&&seatPick&&s){
+    // the host gives a bot's seat to a voyeur
+    var sv=s.voyeurs.filter(function(v){return v.id===seatPick})[0];
+    h='<div class="scrim" data-a="close"><section class="sheet" role="dialog" aria-label="Give a seat" data-stop>'
+     +'<div class="sh-hd"><h2>A seat for '+esc(sv?sv.name:'a voyeur')+'</h2><button class="ib" data-a="close" aria-label="Close">'+ICON.close+'</button></div>'
+     +'<p class="pr">They take over the bot’s score from the next round. Pick the seat.</p><div class="stack">'
+     +s.players.filter(function(p){return p.bot}).map(function(p){return '<button class="btn wide" data-a="seat" data-v="'+p.id+'">'+esc(p.name)+' <span class="pr">'+p.score+' points'+(p.ex?' · was a player':'')+'</span></button>'}).join('')
+     +'</div></section></div>';
   }else if(sheet==='rules'){
     h='<div class="scrim" data-a="close"><section class="sheet" role="dialog" aria-label="Rules" data-stop>'
      +'<div class="sh-hd"><h2>The rules</h2><button class="ib" data-a="close" aria-label="Close">'+ICON.close+'</button></div>'+rulesHTML()+'</section></div>';
@@ -1741,9 +2228,19 @@ function rulesHTML(){
   +'<h3>The cut</h3><ul><li>The cut suit rotates: Spades, Hearts, Clubs, Diamonds, then no cut.</li><li>With none of the led suit, play anything. A cut card beats the led suit; a higher cut beats a lower one.</li></ul>'
   +'<h3>Scoring</h3><ul><li>Make your call exactly: 10 plus your call. Call 0 and win nothing: 10.</li><li>Miss: 0. On the Screen, a made call shows its points in bold; a missed call is struck out with the hands actually made beside it.</li></ul>';
 }
+// After the game the final scores stay up: Play again and Game setup wait `againIn` (30 s, set by the server)
+function againLeft(){return againDeadline==null?0:Math.max(0,Math.ceil((againDeadline-Date.now())/1000))}
+function againLabel(t,left){return left?(t==='Game setup'?'Setup':t)+' in '+left+'s':t}   // 'Setup in 24s' fits the half-width button
+setInterval(function(){
+  var b=$('#againbtn'),w=$('#overwait'),st=$('#setupbtn');if(!b&&!w)return;
+  var left=againLeft();
+  if(b){b.disabled=left>0;b.textContent=againLabel('Play again',left)}
+  if(st){st.disabled=left>0;st.textContent=againLabel('Game setup',left)}
+  if(w)w.textContent='Waiting for the host'+(left?' · '+left+'s':'');
+},250);
 function renderOver(){
   if(!snap||snap.phase!=='gameover'||sheet)return;
-  var s=snap,order=s.players.slice().sort(function(a,b){return b.score-a.score});
+  var s=snap,host=s.host===s.me||(isLocal&&game&&game.code==='DEMO'),left=againLeft(),order=s.players.slice().sort(function(a,b){return b.score-a.score});
   var names=s.winners.map(function(id){return id===s.me?'You':nameOf(id)});
   var title=names.length>1?esc(names.join(' & '))+' tie!':(names[0]==='You'?'You win!':esc(names[0])+' wins');
   var stars='<svg class="stars pen draw" viewBox="0 0 300 160" preserveAspectRatio="none" aria-hidden="true">'
@@ -1752,15 +2249,29 @@ function renderOver(){
    +'<div class="over"><div class="wn">'+title+stars+'<svg class="u pen draw" viewBox="0 0 200 18" preserveAspectRatio="none" style="--d:.5s" aria-hidden="true"><path pathLength="1" d="M4,7 C60,3 140,3 196,6"/><path pathLength="1" style="--d:.8s" d="M10,14 C70,10 130,11 190,12"/></svg></div>'
    +'<div class="rank">'+order.map(function(p,i){return '<div class="'+(p.id===s.me?'me':'')+'"><span>'+(i+1)+'. '+esc(p.id===s.me?'You':p.name)+'</span><span>'+p.score+'</span></div>'}).join('')+'</div>'
    +'</div><div class="over-sc">'+screenHTML()+'</div>'
-   +'<div class="over btns"><button class="btn" data-a="home">Leave</button>'+(s.host===s.me||(isLocal&&game&&game.code==='DEMO')?'<button class="btn pri" data-a="again">Play again</button>':'<span class="pr" style="align-self:center">Waiting for the host</span>')+'</div>'
+   +'<div class="over btns eg">'
+   +(host?'<button class="btn pri" id="againbtn" data-a="again"'+(left?' disabled':'')+'>'+againLabel('Play again',left)+'</button>'
+         :'<span class="pr" id="overwait">Waiting for the host'+(left?' · '+left+'s':'')+'</span>')
+   +'<button class="btn" data-a="home">Leave</button>'
+   +(host&&!isLocal?'<button class="btn" id="setupbtn" data-a="setup"'+(left?' disabled':'')+'>'+againLabel('Game setup',left)+'</button>':'')
+   +'</div>'
    +'</section></div>';
   $('#sheet').innerHTML=h;
 }
 
 /* ---------- main render ---------- */
+// A voyeur asked to see this player's hand: Allow or Deny, from wherever the player is on the screen.
+function renderAsk(){
+  var el=$('#ask');if(!el)return;
+  var s=snap,list=s&&!s.voyeur&&s.voyeurs?s.voyeurs.filter(function(v){return v.peek&&v.peek.pid===s.me&&v.peek.state==='pending'}):[];
+  el.innerHTML=list.map(function(v){
+    return '<div class="ask" role="alert"><span class="t"><b>'+esc(v.name)+'</b> <span class="vy">voyeur</span> asks to see your hand</span>'
+      +'<button class="btn sm pri" data-a="peekyes" data-v="'+v.id+'">Allow</button><button class="btn sm" data-a="peekno" data-v="'+v.id+'">Deny</button></div>';
+  }).join('');
+}
 function render(){
   if(!snap)renderHome();else if(snap.phase==='lobby')renderLobby();else renderGame();
-  if(sheet!=='rules')renderSheet();renderOver();paintConn();
+  if(sheet!=='rules')renderSheet();renderOver();renderAsk();paintConn();
 }
 
 /* ---------- input ---------- */
@@ -1805,7 +2316,29 @@ document.addEventListener('click',function(e){
     case 'copy':shareInvite();break;
     case 'kickask':pendingKick=+t.dataset.p;render();break;
     case 'kickno':pendingKick=null;render();break;
-    case 'kickyes':act({type:'kick',pid:+t.dataset.p});pendingKick=null;render();toast('Player removed');break;
+    case 'kickyes':{
+      var kp=+t.dataset.p;pendingKick=null;
+      // in a game with voyeurs watching, the host also picks who takes the removed player's seat
+      if(snap&&snap.phase!=='lobby'&&liveVoyeurs().length){handover={kind:'kick',pid:kp};sheet='handover';render();break}
+      act({type:'kick',pid:kp});render();toast('Player removed');break;
+    }
+    case 'hand':{
+      var ho=handover,hto=v===''?null:+v;handover=null;sheet=null;
+      if(ho&&ho.kind==='kick'){act({type:'kick',pid:ho.pid,to:hto});render();toast('Player removed')}
+      else if(ho)leave(hto);
+      break;
+    }
+    case 'claim':claimSeat();break;
+    case 'watch':watchRoom();break;
+    case 'offerpeek':if(joinOffer){joinOffer.peek=v===''?null:+v;render()}break;
+    case 'offerno':joinOffer=null;render();break;
+    case 'stab':screenTab=(v==='hands')?'hands':(v==='last')?'last':'scores';render();break;
+    case 'peeksheet':sheet='peek';renderSheet();break;
+    case 'peek':act({type:'peek',pid:v===''?null:+v});sheet=null;render();break;
+    case 'peekyes':act({type:'peekreply',vid:+v,ok:true});break;
+    case 'peekno':act({type:'peekreply',vid:+v,ok:false});break;
+    case 'seatask':seatPick=+v;sheet='seat';renderSheet();break;
+    case 'seat':{var sp=seatPick;seatPick=null;sheet=null;act({type:'seat',vid:sp,pid:+v});render();break}
     case 'rename':{var rv=($('#rn')||{}).value;rv=(rv||'').trim();if(!rv){toast('Write a name first');break}setup.name=rv;save('jn_setup',setup);act({type:'rename',name:rv});toast('Name saved');break}
     case 'layout':ui.layout=(v==='scroll')?'scroll':'fit';autoScroll=false;applyUI();render();break;
     case 'redeal':{var nmv=($('#nm')||{}).value;firstHome=true;render();if(nmv!=null&&$('#nm'))$('#nm').value=nmv;break}
@@ -1816,7 +2349,7 @@ document.addEventListener('click',function(e){
     case 'timer':setup.timer=+v;keepName();save('jn_setup',setup);render();break;
     case 'call':act({type:'call',n:+t.dataset.n});break;
     case 'nope':toast('Calls can’t add up to '+snap.round.cards+', so pick another number');break;
-    case 'screen':sheet='screen';$('#sheet').innerHTML='';renderSheet();break;
+    case 'screen':sheet='screen';screenTab='scores';$('#sheet').innerHTML='';renderSheet();break;
     case 'chat':sheet='chat';chatSeen=lastId(snap);$('#pop').innerHTML='';render();var ci=$('#cin');if(ci&&matchMedia('(pointer:fine)').matches)ci.focus();break;
     case 'settings':case 'menu':case 'table':sheet='settings';pendingKick=null;renderSheet();break;
     case 'ink':ui.ink=v;applyUI();renderSheet();break;
@@ -1827,14 +2360,12 @@ document.addEventListener('click',function(e){
     case 'next':scHidden=false;act({type:'next'});break;
     case 'quick':sendChat(v);break;
     case 'theme':ui.theme=v;applyUI();renderSheet();break;
-    case 'fs':ui.fs=+v;setAppH();applyUI();render();
-if(window.visualViewport)visualViewport.addEventListener('resize',function(){setAppH();if(snap&&$('#tbl'))fillTable()});
-addEventListener('orientationchange',function(){setTimeout(function(){setAppH();if(snap)render()},250)});
-if(sess&&!DEMO)tryRejoin();break;
+    case 'fs':ui.fs=+v;setAppH();applyUI();render();break;
     case 'glevel':act({type:'level',level:v});setTimeout(renderSheet,60);break;
     case 'gtimer':act({type:'timer',sec:+v});setTimeout(renderSheet,60);break;
     case 'again':sheet=null;if(isLocal&&game&&game.code==='DEMO')startGame();else act({type:'again'});break;
-    case 'home':leave();break;
+    case 'setup':sheet=null;act({type:'setup'});break;
+    case 'home':askLeave();break;
   }
 });
 function keepName(){var i=$('#nm');if(i)setup.name=i.value.trim()}
@@ -1866,6 +2397,9 @@ addEventListener('resize',function(){setAppH();clearTimeout(rsT);rsT=setTimeout(
   if(snap)render();else{var nm=$('#nm'),v=nm&&nm.value,rc=$('#rc'),rv=rc&&rc.value;homeFw=null;renderHome();if(v!=null&&$('#nm'))$('#nm').value=v;if(rv!=null&&$('#rc'))$('#rc').value=rv}
 },120)});
 matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyUI);
+// (these two used to sit inside the text-size button's handler, so they only existed after that button was tapped)
+if(window.visualViewport)visualViewport.addEventListener('resize',function(){setAppH();if(snap&&$('#tbl'))fillTable()});
+addEventListener('orientationchange',function(){setTimeout(function(){setAppH();if(snap)render()},250)});
 
 applyUI();render();
 if(sess&&!DEMO)tryRejoin();

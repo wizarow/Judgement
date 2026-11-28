@@ -5,7 +5,7 @@ v2 · Ishan Atul's render
 
 ## Run locally
     node server.js      # http://localhost:3000   (Node 18+, no dependencies)
-    npm test            # simulated games, 3 to 8 players
+    npm test            # simulated games, 3 to 8 players, plus the voyeur / seat / away rules
     node build.js       # writes dist/judgement-demo.html (offline demo: simulated rooms, friends played by the computer)
 
 ## Deploy on Render (same as Acquire)
@@ -16,11 +16,13 @@ v2 · Ishan Atul's render
 Don't redeploy mid-game: live rooms are held in memory and drop on restart. The free plan sleeps when idle.
 
 ## Files
-- `server.js`        rooms, live updates (server-sent events), static files (Brotli/gzip compressed once, with ETag so unchanged files cost a 304)
+- `server.js`        rooms, live updates (server-sent events; streams are keyed by token so a seat can change hands under them), `/api/watch` and `/api/claim`, static files (Brotli/gzip compressed once, with ETag so unchanged files cost a 304)
 - `public/engine.js` all the rules and the bots; shared by server and browser
 - `public/index.html` the whole UI (v2 notebook design)
 - `docs/DESIGN.md`, `docs/PRODUCT.md`  design system and product notes
 - `test/engine.test.js` rule checks and full simulated games
+- `test/voyeur.test.js` voyeurs, seat handover, taking a seat back, away to bot, the last hand
+- `test/voyeur_ui.py` browser tests for the same (Playwright; run the server with `JD_FAST=1 JD_LAST_ROUND_MS=2500 JD_AGAIN_MS=3000` so bots move instantly and the Last round lock and the game-end wait are short; live rooms use 45 s and 30 s)
 - `build.js`         makes the single-page demo
 
 ## Rules as built
@@ -41,11 +43,26 @@ Don't redeploy mid-game: live rooms are held in memory and drop on restart. The 
 - Game: header with round, cards and the cut suit (large). One ruled line per player: calling-order number
   (filled = calls first, red = calls last), name, "1 of 2" hands made vs called (red when over), total.
   Away players show "away · auto-plays"; on their turn the status reads "<name> is away · auto-plays in 85s".
+  After two auto-played turns in a row the seat becomes a bot (see Seats and voyeurs).
   Calling pad: numbers 0..cards, the forbidden last-caller number struck out with the reason. No suggestions.
   Play a card by flicking it up, or tap it to pick it and press the Play button under your hand (tap again to put it back). The winning card gets an ink circle.
 - Screen: shown on the page between rounds (Hide returns to the table with The Screen / Deal buttons).
+  Three tabs: **Scores**; **Hands won**: every hand the player has taken, round by round, newest first (the round under way at the top), each hand as its four cards with the winning card ringed, a round with none says "No hands won" (a voyeur sees it for the player whose hand they are allowed to see, otherwise it is greyed out); and **Last round**: the final hand of the last finished round, large, with the winner circled, led and cut tagged, and hands made of called under each name. Last round is open from the end of a round until 45 seconds into the next one, then it locks: the tab greys out and the game stops sending those cards. It is greyed out in round 1.
+- Round end: after the last hand of every round the table stays for 4 seconds (the last hand on the table), then the Screen opens.
+- Game over: the final scores stay up. **Play again** deals a new game at once with the same players and the same bots (voyeurs sit down, spare bots make room). **Game setup** goes to the lobby of the same room, where the host can add or remove bots and players and then press Start. Both are host-only and both wait 30 seconds from the end of the game (the countdown is on the buttons and everyone sees it; the server enforces it, so a refresh doesn't skip it). Leave works any time.
   Made calls show their points in bold; missed calls are struck in red with the hands actually made.
 - Chat: every new message pops up as a sticky note. Quick replies plus free text.
+  Quick replies: wah!, bold call, gg, kaled, today, sick, 😂, 👏. Voyeurs can chat too, tagged "voyeur".
+
+## Seats and voyeurs
+- Joining a game that has already started offers **Join as a voyeur** (and **Take back my seat** if the name matches a seat that was yours). Up to 10 voyeurs per room.
+- A voyeur sees the table: calls, hands made, scores, the current hand, the Screen and chat. No cards, unless they ask for one player's hand (while joining, or later with Whose hand?). That player gets Allow / Deny, can stop sharing any time, and Deny leaves the voyeur on the table view. Bots can't be asked.
+- Someone who taps Leave the table mid-game picks who takes the seat: a bot, or one of the voyeurs. The hand, call and score stay with the seat. With no voyeurs a bot just takes over and the table is told. If the host removes a player, the host picks the same way.
+- The host can give a bot's seat to a voyeur between rounds (Settings > Voyeurs > Give a seat). The bot's score stays.
+- Away to bot: an away player's turn auto-plays after 90 s. Two auto-played turns in a row (calls and plays both count; acting or reconnecting resets it) turn the seat into a bot. A connected player whose turn timer runs out is auto-played but keeps the seat.
+- Coming back: the same browser takes the seat straight back just by reopening the page. Another device enters the room code and the same name and gets Take back my seat. A player the host removed can't come back.
+- Play again / Game setup: voyeurs sit down as players while there is room (8 seats); the rest keep watching.
+- Voyeurs who close the page are dropped after 2 minutes.
 
 ## Settings (one panel, sliders icon)
 Players (host removes, with confirm), bots (lobby only), bot difficulty, turn timer,
